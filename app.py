@@ -6,6 +6,7 @@ from datetime import datetime
 
 st.set_page_config(page_title="📘 공인중개사 OX 퀴즈", layout="centered")
 
+# 상태 초기화
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'user_name' not in st.session_state:
@@ -16,7 +17,12 @@ if 'score' not in st.session_state:
     st.session_state.score = 0
 if 'total' not in st.session_state:
     st.session_state.total = 0
+if 'answered' not in st.session_state:
+    st.session_state.answered = False
+if 'question' not in st.session_state:
+    st.session_state.question = None
 
+# 로그인
 if not st.session_state.logged_in:
     st.title("🔐 사용자 로그인")
     name = st.text_input("이름을 입력하세요")
@@ -38,53 +44,62 @@ st.sidebar.header("📂 문제집 선택")
 csv_files = [f for f in os.listdir() if f.endswith(".csv")]
 selected_file = st.sidebar.selectbox("사용할 파일을 선택하세요", csv_files)
 
+user_answer = None  # 기본값 미리 선언 (오류 방지)
+
 if selected_file:
     df = pd.read_csv(selected_file)
     df = df.dropna(subset=["문제", "정답"])
+    st.session_state.df = df  # rerun 대비 저장
 
     chapters = sorted(df["단원명"].dropna().unique())
     selected_chapter = st.sidebar.selectbox("특정 단원만 푸시겠습니까?", ["전체 보기"] + list(chapters))
     if selected_chapter != "전체 보기":
         df = df[df["단원명"] == selected_chapter]
 
-    if not df.empty:
-        question = df.sample(1).iloc[0]
-        st.markdown(f"📚 단원명: {question['단원명']} | 문제번호: {int(question['문제번호'])}")
-        st.markdown(f"❓ {question['문제']}")
-        col1, col2, col3 = st.columns(3)
-        if col1.button("⭕ O"):
-            user_answer = "O"
-        elif col2.button("❌ X"):
-            user_answer = "X"
-        elif col3.button("⁉️ 모름"):
-            user_answer = "모름"
-        else:
-            user_answer = None
-
-if user_answer:
-    st.session_state.total += 1
-    if user_answer == question["정답"]:
-        st.session_state.score += 1
-        st.success("✅ 정답입니다!")
-        st.info(f"📘 해설: {question['해설']}")
-    else:
-        st.session_state.wrong_list.append({
-            "이름": st.session_state.user_name,
-            "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "문제번호": int(question["문제번호"]),
-            "단원명": question["단원명"],
-            "문제": question["문제"],
-            "정답": question["정답"],
-            "선택": user_answer,
-            "해설": question["해설"]
-        })
-        st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
-        st.info(f"📘 해설: {question['해설']}")
-
-    if st.button("👉 다음 문제"):
+    if not st.session_state.answered or st.session_state.question is None:
         st.session_state.question = df.sample(1).iloc[0]
-        st.session_state.answered = False
-        st.experimental_rerun()
+
+    question = st.session_state.question
+
+    st.markdown(f"📚 단원명: {question['단원명']} | 문제번호: {int(question['문제번호'])}")
+    st.markdown(f"❓ {question['문제']}")
+    col1, col2, col3 = st.columns(3)
+    if col1.button("⭕ O"):
+        user_answer = "O"
+    elif col2.button("❌ X"):
+        user_answer = "X"
+    elif col3.button("⁉️ 모름"):
+        user_answer = "모름"
+
+    if user_answer:
+        st.session_state.total += 1
+        st.session_state.answered = True
+
+        if user_answer == question["정답"]:
+            st.session_state.score += 1
+            st.success("✅ 정답입니다!")
+        else:
+            st.session_state.wrong_list.append({
+                "이름": st.session_state.user_name,
+                "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "문제번호": int(question["문제번호"]),
+                "단원명": question["단원명"],
+                "문제": question["문제"],
+                "정답": question["정답"],
+                "선택": user_answer,
+                "해설": question["해설"]
+            })
+            st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
+
+        # 공통 해설 출력
+        if pd.notna(question.get("해설", "")):
+            st.info(f"📘 해설: {question['해설']}")
+
+    if st.session_state.answered:
+        if st.button("👉 다음 문제"):
+            st.session_state.question = df.sample(1).iloc[0]
+            st.session_state.answered = False
+            st.experimental_rerun()
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
