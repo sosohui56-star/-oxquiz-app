@@ -62,25 +62,29 @@ if selected_file:
             user_answer = None
 
         if user_answer:
-            st.session_state.total += 1
-            if user_answer == question["정답"]:
-                st.session_state.score += 1
-                st.success("✅ 정답입니다!")
-            else:
-                st.session_state.wrong_list.append({
-                    "이름": st.session_state.user_name,
-                    "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "문제번호": int(question["문제번호"]),
-                    "단원명": question["단원명"],
-                    "문제": question["문제"],
-                    "정답": question["정답"],
-                    "선택": user_answer,
-                    "해설": question["해설"]
-                })
-                st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
-                st.info(f"📘 해설: {question['해설']}")
+    st.session_state.total += 1
+    if user_answer == question["정답"]:
+        st.session_state.score += 1
+        st.success("✅ 정답입니다!")
+        st.info(f"📘 해설: {question['해설']}")
+    else:
+        st.session_state.wrong_list.append({
+            "이름": st.session_state.user_name,
+            "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "문제번호": int(question["문제번호"]),
+            "단원명": question["단원명"],
+            "문제": question["문제"],
+            "정답": question["정답"],
+            "선택": user_answer,
+            "해설": question["해설"]
+        })
+        st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
+        st.info(f"📘 해설: {question['해설']}")
 
-            st.experimental_rerun()
+    if st.button("👉 다음 문제"):
+        st.session_state.question = df.sample(1).iloc[0]
+        st.session_state.answered = False
+        st.experimental_rerun()  # 이건 이제 안전하게 여기에 위치
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
