@@ -61,7 +61,7 @@ if selected_file:
         else:
             user_answer = None
 
-        if user_answer:
+if user_answer:
     st.session_state.total += 1
     if user_answer == question["정답"]:
         st.session_state.score += 1
@@ -84,7 +84,7 @@ if selected_file:
     if st.button("👉 다음 문제"):
         st.session_state.question = df.sample(1).iloc[0]
         st.session_state.answered = False
-        st.experimental_rerun()  # 이건 이제 안전하게 여기에 위치
+        st.experimental_rerun()
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
