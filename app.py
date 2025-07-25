@@ -75,24 +75,32 @@ if selected_file:
         st.session_state.total += 1
         st.session_state.answered = True
 
-        if user_answer == question["정답"]:
-            st.session_state.score += 1
-            st.success("✅ 정답입니다!")
-        else:
-            st.session_state.wrong_list.append({
-                "이름": st.session_state.user_name,
-                "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "문제번호": int(question["문제번호"]),
-                "단원명": question["단원명"],
-                "문제": question["문제"],
-                "정답": question["정답"],
-                "선택": user_answer,
-                "해설": question["해설"] if "해설" in question and pd.notna(question["해설"]) else ""
-            })
-            st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
+        if user_answer:
+    st.session_state.total += 1
+    st.session_state.answered = True
+    st.session_state.last_question = question  # ✅ 현재 문제 저장
 
-        if "해설" in question and pd.notna(question["해설"]):
-            st.info(f"📘 해설: {question['해설']}")
+    if user_answer == question["정답"]:
+        st.session_state.score += 1
+        st.success("✅ 정답입니다!")
+    else:
+        st.session_state.wrong_list.append({
+            "이름": st.session_state.user_name,
+            "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "문제번호": int(question["문제번호"]),
+            "단원명": question["단원명"],
+            "문제": question["문제"],
+            "정답": question["정답"],
+            "선택": user_answer,
+            "해설": question["해설"] if "해설" in question and pd.notna(question["해설"]) else ""
+        })
+        st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
+
+# 아래 해설 출력은 항상 `last_question` 기준으로
+if st.session_state.answered and "last_question" in st.session_state:
+    last_q = st.session_state.last_question
+    if "해설" in last_q and pd.notna(last_q["해설"]):
+        st.info(f"📘 해설: {last_q['해설']}")
 
     if st.session_state.answered:
         if st.button("👉 다음 문제"):
