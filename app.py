@@ -17,7 +17,7 @@ if selected_file:
     # ✅ 무작위 문제 1개 선택
     question = df.sample(1).iloc[0]
 
-    st.markdown(f"📚 단원명: {question['단원명']} | 문제번호: {int(question['문제번호'])}")
+    st.markdown(f"📚 단원명: {question['단원명']} | 문제번호: {question['문제번호']}")
     st.markdown(f"❓ {question['문제']}")
 
     choice = st.radio("정답을 선택하세요", ["O", "X", "모름"], horizontal=True)
