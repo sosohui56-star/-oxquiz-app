@@ -87,18 +87,18 @@ if selected_file:
                 "문제": question["문제"],
                 "정답": question["정답"],
                 "선택": user_answer,
-                "해설": question["해설"]
+                "해설": question["해설"] if "해설" in question and pd.notna(question["해설"]) else ""
             })
             st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
 
-        if pd.notna(question.get("해설", "")):
+        if "해설" in question and pd.notna(question["해설"]):
             st.info(f"📘 해설: {question['해설']}")
 
     if st.session_state.answered:
         if st.button("👉 다음 문제"):
             st.session_state.question = df.sample(1).iloc[0]
             st.session_state.answered = False
-            st.experimental_rerun()
+            st.rerun()
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
@@ -117,11 +117,3 @@ if selected_file:
             st.sidebar.warning("❗ 오답이 없습니다.")
 else:
     st.warning("⚠️ CSV 문제 파일을 업로드하세요.")
-'''
-
-# 저장
-file_path = "/mnt/data/ox_quiz_fixed.py"
-with open(file_path, "w", encoding="utf-8") as f:
-    f.write(code)
-
-file_path
