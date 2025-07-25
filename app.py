@@ -27,7 +27,7 @@ if not st.session_state.logged_in:
             st.session_state.logged_in = True
             st.session_state.user_name = f"{name} ({group})"
             st.success(f"🎉 환영합니다, {st.session_state.user_name}님!")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("❌ 암호가 틀렸습니다.")
     st.stop()
