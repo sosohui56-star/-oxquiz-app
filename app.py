@@ -59,7 +59,7 @@ if selected_file:
     if not st.session_state.answered or st.session_state.question is None:
         st.session_state.question = df.sample(1).iloc[0]
 
-    question = st.session_state.question
+    question = st.session_state.question.copy()
 
     st.markdown(f"📚 단원명: {question['단원명']} | 문제번호: {int(question['문제번호'])}")
     st.markdown(f"❓ {question['문제']}")
