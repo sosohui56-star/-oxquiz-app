@@ -75,7 +75,7 @@ if selected_file:
         st.session_state.total += 1
         st.session_state.answered = True
 
-   if user_answer:
+    if user_answer:
     st.session_state.total += 1
     st.session_state.answered = True
     st.session_state.last_question = question  # ✅ 현재 문제 저장
