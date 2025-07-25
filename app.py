@@ -21,8 +21,10 @@ if 'answered' not in st.session_state:
     st.session_state.answered = False
 if 'question' not in st.session_state:
     st.session_state.question = None
+if 'last_question' not in st.session_state:
+    st.session_state.last_question = None
 
-# 로그인
+# 로그인 화면
 if not st.session_state.logged_in:
     st.title("🔐 사용자 로그인")
     name = st.text_input("이름을 입력하세요")
@@ -38,6 +40,7 @@ if not st.session_state.logged_in:
             st.error("❌ 암호가 틀렸습니다.")
     st.stop()
 
+# 메인 화면
 st.title("📘 공인중개사 OX 퀴즈")
 st.sidebar.header("📂 문제집 선택")
 
@@ -56,11 +59,14 @@ if selected_file:
     if selected_chapter != "전체 보기":
         df = df[df["단원명"] == selected_chapter]
 
-    if not st.session_state.answered or st.session_state.question is None:
+    # 문제 불러오기
+    if not st.session_state.answered:
         st.session_state.question = df.sample(1).iloc[0]
+        st.session_state.last_question = st.session_state.question.copy()
 
     question = st.session_state.question.copy()
 
+    # 문제 표시
     st.markdown(f"📚 단원명: {question['단원명']} | 문제번호: {int(question['문제번호'])}")
     st.markdown(f"❓ {question['문제']}")
     col1, col2, col3 = st.columns(3)
@@ -71,10 +77,10 @@ if selected_file:
     elif col3.button("⁉️ 모름"):
         user_answer = "모름"
 
+    # 정답 처리
     if user_answer:
         st.session_state.total += 1
         st.session_state.answered = True
-        st.session_state.last_question = question
 
         if user_answer == question["정답"]:
             st.session_state.score += 1
@@ -92,32 +98,29 @@ if selected_file:
             })
             st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
 
-    # 해설 출력
-    if st.session_state.answered and "last_question" in st.session_state:
-        last_q = st.session_state.last_question
-        if "해설" in last_q and pd.notna(last_q["해설"]):
-            st.info(f"📘 해설: {last_q['해설']}")
+# 해설 출력
+if st.session_state.answered and st.session_state.last_question is not None:
+    last_q = st.session_state.last_question
+    if "해설" in last_q and pd.notna(last_q["해설"]):
+        st.info(f"📘 해설: {last_q['해설']}")
 
-        if st.button("👉 다음 문제"):
-            st.session_state.question = df.sample(1).iloc[0]
-            st.session_state.answered = False
-            st.rerun()
+    if st.button("👉 다음 문제"):
+        st.session_state.answered = False
+        st.rerun()
 
-    # 사이드바 정보
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
-    st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
-    st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
-    st.sidebar.markdown(f"📊 총 풀이 수: {st.session_state.total}")
-    st.sidebar.markdown("Made with ❤️ for 공인중개사 수험생")
+# 사이드바 정보
+st.sidebar.markdown("---")
+st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
+st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
+st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
+st.sidebar.markdown(f"📊 총 풀이 수: {st.session_state.total}")
+st.sidebar.markdown("Made with ❤️ for 공인중개사 수험생")
 
-    if st.sidebar.button("🗂️ 오답 엑셀로 저장"):
-        if st.session_state.wrong_list:
-            wrong_df = pd.DataFrame(st.session_state.wrong_list)
-            filename = f"{st.session_state.user_name}_오답_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-            wrong_df.to_excel(filename, index=False)
-            st.sidebar.success(f"📁 {filename} 저장 완료!")
-        else:
-            st.sidebar.warning("❗ 오답이 없습니다.")
-else:
-    st.warning("⚠️ CSV 문제 파일을 업로드하세요.")
+if st.sidebar.button("🗂️ 오답 엑셀로 저장"):
+    if st.session_state.wrong_list:
+        wrong_df = pd.DataFrame(st.session_state.wrong_list)
+        filename = f"{st.session_state.user_name}_오답_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        wrong_df.to_excel(filename, index=False)
+        st.sidebar.success(f"📁 {filename} 저장 완료!")
+    else:
+        st.sidebar.warning("❗ 오답이 없습니다.")
