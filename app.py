@@ -44,12 +44,12 @@ st.sidebar.header("📂 문제집 선택")
 csv_files = [f for f in os.listdir() if f.endswith(".csv")]
 selected_file = st.sidebar.selectbox("사용할 파일을 선택하세요", csv_files)
 
-user_answer = None  # 기본값 미리 선언 (오류 방지)
+user_answer = None
 
 if selected_file:
     df = pd.read_csv(selected_file)
     df = df.dropna(subset=["문제", "정답"])
-    st.session_state.df = df  # rerun 대비 저장
+    st.session_state.df = df
 
     chapters = sorted(df["단원명"].dropna().unique())
     selected_chapter = st.sidebar.selectbox("특정 단원만 푸시겠습니까?", ["전체 보기"] + list(chapters))
@@ -91,7 +91,6 @@ if selected_file:
             })
             st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
 
-        # 공통 해설 출력
         if pd.notna(question.get("해설", "")):
             st.info(f"📘 해설: {question['해설']}")
 
@@ -99,7 +98,7 @@ if selected_file:
         if st.button("👉 다음 문제"):
             st.session_state.question = df.sample(1).iloc[0]
             st.session_state.answered = False
-            st.rerun()
+            st.experimental_rerun()
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
@@ -118,3 +117,11 @@ if selected_file:
             st.sidebar.warning("❗ 오답이 없습니다.")
 else:
     st.warning("⚠️ CSV 문제 파일을 업로드하세요.")
+'''
+
+# 저장
+file_path = "/mnt/data/ox_quiz_fixed.py"
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(code)
+
+file_path
