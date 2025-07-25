@@ -4,7 +4,7 @@ import os
 import random
 
 st.set_page_config(page_title="민법 OX 퀴즈", layout="centered")
-st.title("📘 민법 OX 퀴즈")
+st.title("📘 공인중개사 OX 퀴즈")
 st.sidebar.header("📂 문제집 선택")
 
 # ✅ 현재 폴더 내 CSV 파일 자동 탐색
