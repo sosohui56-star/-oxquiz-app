@@ -376,9 +376,9 @@ def main_page() -> None:
     # 6. 단원 목록 확보
     try:
         if isinstance(df_source, pd.DataFrame):
-            df_loaded_temp = df_source.copy()
-        else:
-            df_loaded_temp = pd.read_csv(df_source)
+    df_loaded_temp = df_source.copy()
+else:
+    df_loaded_temp = pd.read_csv(df_source)
     except Exception as e:
         st.error(f"{file_label} 파일을 읽는 중 오류가 발생했습니다: {e}")
         return
