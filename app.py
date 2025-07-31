@@ -382,7 +382,9 @@ log_to_sheet({
     "correct": correct,
     "rating": "skip" if skip else "low" if low else "mid"
 })
-    if st.session_state.answered and st.session_state.last_question is not None:
+
+if st.session_state.answered and st.session_state.last_question is not None:
+    ...
         last_q = st.session_state.last_question
         if "해설" in last_q and pd.notna(last_q["해설"]):
             st.info(f"📘 해설: {last_q['해설']}")
