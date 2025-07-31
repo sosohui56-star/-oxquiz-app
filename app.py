@@ -65,10 +65,6 @@ def record_user_activity() -> None:
         st.warning(f"기록 파일에 저장하는 중 오류가 발생했습니다: {e}")
 
 def connect_to_sheet():
-    """
-    구글 스프레드시트에 연결합니다.
-    Streamlit secrets에 저장된 GCP_CREDENTIALS를 사용하여 인증합니다.
-    """
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/spreadsheets",
@@ -77,6 +73,8 @@ def connect_to_sheet():
     creds_dict = json.loads(st.secrets["GCP_CREDENTIALS"])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
+
+    # ⬇ 시트 탭 이름이 '시트1'이라면 worksheet("시트1")로 지정
     sheet = client.open("oxquiz_progress_log").worksheet("시트1")
     return sheet
 
@@ -470,11 +468,11 @@ def main_page() -> None:
     # 정답/오답 후 해설과 평점 버튼 표시
     if st.session_state.answered and st.session_state.last_question is not None:
         last_q = st.session_state.last_question
-     # 해설이 있으면 표시
+# 해설이 있으면 표시
 if "해설" in last_q and pd.notna(last_q["해설"]):
     st.info(f"📘 해설: {last_q['해설']}")
 
-# 해설 여부와 관계없이 등급 선택 버튼은 항상 표시
+# 해설이 없어도 평점 버튼 항상 표시
 rating_col1, rating_col2, rating_col3 = st.columns(3)
 
 if rating_col1.button("❌ 다시 보지 않기"):
