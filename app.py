@@ -374,14 +374,14 @@ def main_page() -> None:
         st.session_state.prev_selected_file = file_label
 
     # 6. 단원 목록 확보
-    try:
-        if isinstance(df_source, pd.DataFrame):
-    df_loaded_temp = df_source.copy()
-else:
-    df_loaded_temp = pd.read_csv(df_source)
-    except Exception as e:
-        st.error(f"{file_label} 파일을 읽는 중 오류가 발생했습니다: {e}")
-        return
+try:
+    if isinstance(df_source, pd.DataFrame):
+        df_loaded_temp = df_source.copy()
+    else:
+        df_loaded_temp = pd.read_csv(df_source)
+except Exception as e:
+    st.error(f"{file_label} 파일을 읽는 중 오류가 발생했습니다: {e}")
+    return
 
     # 필수 컬럼 확인
     if "문제" not in df_loaded_temp.columns or "정답" not in df_loaded_temp.columns:
