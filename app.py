@@ -384,11 +384,9 @@ log_to_sheet({
 })
 
 if st.session_state.answered and st.session_state.last_question is not None:
-    ...
-        last_q = st.session_state.last_question
-        if "해설" in last_q and pd.notna(last_q["해설"]):
-            st.info(f"📘 해설: {last_q['해설']}")
-
+    last_q = st.session_state.last_question
+    if "해설" in last_q and pd.notna(last_q["해설"]):
+        st.info(f"📘 해설: {last_q['해설']}")
         rating_col1, rating_col2, rating_col3 = st.columns(3)
         if rating_col1.button("❌ 다시 보지 않기"):
             update_question_rating(user_progress_file, str(qnum), "skip")
