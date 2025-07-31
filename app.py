@@ -472,7 +472,7 @@ def main_page() -> None:
 if "해설" in last_q and pd.notna(last_q["해설"]):
     st.info(f"📘 해설: {last_q['해설']}")
 
-# 항상 등급 선택 버튼 표시
+# 해설 유무와 상관없이 평점 버튼 항상 표시
 rating_col1, rating_col2, rating_col3 = st.columns(3)
 
 if rating_col1.button("❌ 다시 보지 않기"):
