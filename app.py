@@ -77,7 +77,7 @@ def connect_to_sheet():
     creds_dict = json.loads(st.secrets["GCP_CREDENTIALS"])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
-    sheet = client.open("oxquiz_progress_log").sheet1
+    sheet = client.open("oxquiz_progress_log").worksheet("시트1")
     return sheet
 
 def log_to_sheet(data: dict):
