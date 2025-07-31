@@ -375,19 +375,13 @@ def main_page() -> None:
                 else "",
             })
             st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
-
-        save_user_progress(user_progress_file, {
-            "question_id": str(qnum),
-            "timestamp": datetime.now().isoformat(),
-            "correct": correct,
-            "chapter": question.get("단원명",""),
-            "question": question["문제"],
-            "answer": user_answer,
-            "correct_answer": question["정답"],
-            "explanation": question["해설"] if "해설" in question and pd.notna(question["해설"]) else "",
-            "rating": ""
-        })
-
+log_to_sheet({
+    "timestamp": datetime.now().isoformat(),
+    "user_name": st.session_state.user_name,
+    "question_id": str(qnum),
+    "correct": correct,
+    "rating": "skip" if skip else "low" if low else "mid"
+})
     if st.session_state.answered and st.session_state.last_question is not None:
         last_q = st.session_state.last_question
         if "해설" in last_q and pd.notna(last_q["해설"]):
@@ -463,3 +457,32 @@ def run_app() -> None:
 
 if __name__ == "__main__":
     run_app()
+import gspread
+import json
+from oauth2client.service_account import ServiceAccountCredentials
+
+def connect_to_sheet():
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds_dict = json.loads(st.secrets["GCP_CREDENTIALS"])
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open("oxquiz_progress_log").sheet1
+    return sheet
+
+def log_to_sheet(data: dict):
+    try:
+        sheet = connect_to_sheet()
+        row = [
+            data["timestamp"],
+            data["user_name"],
+            data["question_id"],
+            data["correct"],
+            data["rating"]
+        ]
+        sheet.append_row(row)
+    except Exception as e:
+        st.warning(f"📛 구글 시트 기록 실패: {e}")
