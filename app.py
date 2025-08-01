@@ -28,6 +28,103 @@ def validate_session_keys(keys):
             else:
                 st.session_state[key] = None
 
+def update_question_rating(file_path: str, question_id: str, rating: str) -> None:
+    try:
+        if os.path.exists(file_path):
+            df = pd.read_csv(file_path)
+            if "rating" not in df.columns:
+                df["rating"] = ""
+            mask = (
+                (df["question_id"] == question_id) &
+                (df["rating"].isna() | (df["rating"] == ""))
+            )
+            if mask.any():
+                df.loc[mask, "rating"] = rating
+                df.to_csv(file_path, index=False)
+    except Exception as e:
+        st.warning(f"문제 이해도 저장 중 오류가 발생했습니다: {e}")
+
+def get_new_question() -> None:
+    df = st.session_state.df
+    if df is not None and not df.empty:
+        st.session_state.question = df.sample(1).iloc[0]
+    else:
+        st.session_state.question = None
+
+def connect_to_sheet():
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds_dict = json.loads(st.secrets["GCP_CREDENTIALS"])
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open("oxquiz_progress_log").worksheet("시트1")
+    return sheet
+
+def log_to_sheet(data: dict):
+    try:
+        sheet = connect_to_sheet()
+        row = [
+            data.get("timestamp"),
+            data.get("user_name"),
+            data.get("question_id"),
+            data.get("correct"),
+            data.get("rating"),
+        ]
+        sheet.append_row(row)
+    except Exception as e:
+        st.warning(f"📛 구글 시트 기록 실패: {e}")
+
+def display_weekly_ranking():
+    file_path = "progress_log.csv"
+    if not os.path.exists(file_path):
+        st.info("아직 풀이 기록이 없습니다.")
+        return
+    try:
+        df = pd.read_csv(file_path)
+    except Exception as e:
+        st.warning(f"주간 랭킹 파일을 읽는 중 오류가 발생했습니다: {e}")
+        return
+
+    if "timestamp" not in df.columns or "user_name" not in df.columns:
+        st.warning("주간 랭킹 파일의 형식이 올바르지 않습니다.")
+        return
+
+    try:
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+    except Exception as e:
+        st.warning(f"날짜 형식을 변환하는 중 오류가 발생했습니다: {e}")
+        return
+
+    now = datetime.now()
+    start_of_week = now - timedelta(days=now.weekday())
+    end_of_week = start_of_week + timedelta(days=7)
+
+    df_week = df[(df["timestamp"] >= start_of_week) & (df["timestamp"] < end_of_week)]
+    if df_week.empty:
+        st.info("이번 주에는 아직 풀이 기록이 없습니다.")
+        return
+
+    ranking_df = (
+        df_week.groupby("user_name").size().reset_index(name="풀이수")
+        .sort_values(by="풀이수", ascending=False)
+    )
+    ranking_df["순위"] = range(1, len(ranking_df) + 1)
+    ranking_df = ranking_df[["순위", "user_name", "풀이수"]]
+
+    st.subheader("📈 이번 주 문제풀이 랭킹")
+    st.table(ranking_df)
+
+    if st.session_state.user_name in ranking_df["user_name"].values:
+        row = ranking_df[
+            ranking_df["user_name"] == st.session_state.user_name
+        ].iloc[0]
+        st.success(
+            f"{st.session_state.user_name}님의 이번 주 풀이 수: {int(row['풀이수'])}개, 순위: {int(row['순위'])}위"
+        )
+
 def handle_rating(rating: str, user_progress_file: str, question: dict) -> None:
     update_question_rating(user_progress_file, st.session_state.last_qnum, rating)
     log_to_sheet({
@@ -52,13 +149,13 @@ if st.session_state.get("answered") and st.session_state.get("last_question"):
 
     col1, col2, col3 = st.columns(3)
     if col1.button("❌ 다시 보지 않기"):
-        handle_rating("skip", user_progress_file, last_q)
+        handle_rating("skip", st.session_state.get("user_progress_file", "progress.csv"), last_q)
     if col2.button("📘 이해 50~90%"):
-        handle_rating("mid", user_progress_file, last_q)
+        handle_rating("mid", st.session_state.get("user_progress_file", "progress.csv"), last_q)
     if col3.button("🔄 이해 50% 미만"):
-        handle_rating("low", user_progress_file, last_q)
+        handle_rating("low", st.session_state.get("user_progress_file", "progress.csv"), last_q)
 
-# 사이드바 요약 표시 (정확한 변수명 사용)
+# 사이드바 요약 표시
 validate_session_keys(["user_name", "score", "total", "wrong_list", "df"])
 accuracy = (st.session_state.score / st.session_state.total * 100) if st.session_state.total > 0 else 0
 remaining = st.session_state.df.shape[0] if st.session_state.df is not None else 0
