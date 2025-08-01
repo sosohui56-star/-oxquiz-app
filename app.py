@@ -63,22 +63,26 @@ def connect_to_sheet():
     return sheet
 
 def log_to_sheet(data: dict):
+    # 진입 로그
+    st.warning("🟡 log_to_sheet 진입")
+    row = [
+        str(data.get("timestamp") or ""),
+        str(data.get("user_name") or ""),
+        str(data.get("question_id") or ""),
+        str(data.get("correct") or ""),
+        str(data.get("rating") or ""),
+    ]
+    st.warning(f"row 내용: {row}")  # 🚨 row 값 출력!
+
     try:
         sheet = connect_to_sheet()
-        row = [
-            str(data.get("timestamp") or ""),
-            str(data.get("user_name") or ""),
-            str(data.get("question_id") or ""),
-            str(data.get("correct") or ""),
-            str(data.get("rating") or ""),
-        ]
-        st.warning(f"row 내용: {row}")  # 🚨🚨🚨 여기에 row 출력!
         sheet.append_row(row)
         st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
         st.info("✅ 구글 시트에 기록 성공!")
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
         st.error(f"📛 구글 시트 기록 실패: {e}")
+
 
 
 
