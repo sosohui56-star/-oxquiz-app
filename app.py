@@ -56,7 +56,7 @@ def connect_to_sheet():
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds_dict = json.loads(st.secrets["GCP_CREDENTIALS"])
+    creds_dict = st.secrets["GCP_CREDENTIALS"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     return client.open("oxquiz_progress_log").worksheet("시트1")
@@ -125,6 +125,16 @@ def handle_rating(rating: str, file: str, q: dict):
     st.rerun()
 
 def main_page():
+    st.sidebar.title("📁 문제 파일 업로드")
+    uploaded_file = st.sidebar.file_uploader("CSV 파일 선택", type="csv")
+    if uploaded_file is not None:
+        try:
+            df = pd.read_csv(uploaded_file)
+            st.session_state.df = df.copy()
+            st.success("✅ 문제 로드 완료!")
+        except Exception as e:
+            st.error(f"❗ CSV 로드 실패: {e}")
+
     question = st.session_state.get("question")
     if question is None:
         get_new_question()
