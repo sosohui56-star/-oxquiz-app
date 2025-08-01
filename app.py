@@ -65,12 +65,13 @@ def connect_to_sheet():
 def log_to_sheet(data: dict):
     try:
         sheet = connect_to_sheet()
+        # None 값 빈 문자열 처리
         row = [
-            str(data.get("timestamp")),
-            str(data.get("user_name")),
-            str(data.get("question_id")),
-            str(data.get("correct")),
-            str(data.get("rating")),
+            str(data.get("timestamp") or ""),
+            str(data.get("user_name") or ""),
+            str(data.get("question_id") or ""),
+            str(data.get("correct") or ""),
+            str(data.get("rating") or ""),
         ]
         sheet.append_row(row)
         st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
