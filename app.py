@@ -125,16 +125,29 @@ st.sidebar.markdown("---")
 quiz_file = st.sidebar.file_uploader("문제 파일 업로드 (CSV)", type=["csv"])
 selected_repo_file = st.sidebar.selectbox("또는 저장소 문제 선택", ["(선택안함)"] + REPO_CSV_FILES)
 
-if quiz_file:
-    df = pd.read_csv(quiz_file)
+try:
+    if quiz_file:
+        df = pd.read_csv(quiz_file)
+        source = "업로드한 파일"
+    elif selected_repo_file != "(선택안함)":
+        df = pd.read_csv(selected_repo_file)
+        source = f"{selected_repo_file} (저장소)"
+    else:
+        st.warning("문제를 업로드하거나 저장소에서 선택하세요.")
+        st.stop()
+
+    df.columns = df.columns.str.strip()
+    required_cols = {"문제번호", "문제", "정답"}
+    if not required_cols.issubset(set(df.columns)):
+        st.error(f"필수 컬럼 누락: {required_cols - set(df.columns)}")
+        st.stop()
+
     st.session_state.df = df
-    st.success(f"업로드한 파일에서 문제 {len(df)}개 불러옴")
-elif selected_repo_file != "(선택안함)":
-    df = pd.read_csv(selected_repo_file)
-    st.session_state.df = df
-    st.success(f"저장소에서 {selected_repo_file} 로드 완료 ({len(df)}문제)")
-else:
-    st.warning("문제를 업로드하거나 저장소에서 선택하세요.")
+    st.success(f"{source}에서 문제 {len(df)}개 불러옴")
+
+except Exception as e:
+    st.error(f"CSV 불러오기 실패: {e}")
+    st.stop()문제를 업로드하거나 저장소에서 선택하세요.")
     st.stop()
 
 chapters = sorted(df['단원명'].dropna().unique())
