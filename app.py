@@ -147,7 +147,6 @@ try:
 
 except Exception as e:
     st.error(f"CSV 불러오기 실패: {e}")
-    st.stop()문제를 업로드하거나 저장소에서 선택하세요.")
     st.stop()
 
 chapters = sorted(df['단원명'].dropna().unique())
