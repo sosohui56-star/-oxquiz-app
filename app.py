@@ -117,6 +117,6 @@ if st.sidebar.button("❔ 오답 목록 보기"):
 
 if st.sidebar.button("📂 오답 엑셀로 저장"):
     save_wrong_list_to_excel()
-    def display_weekly_ranking():
+  def display_weekly_ranking():
     st.subheader("📈 주간 랭킹")
     st.info("이 기능은 아직 구현 중입니다. 다음 업데이트에서 제공될 예정입니다.")
