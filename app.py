@@ -74,8 +74,10 @@ def log_to_sheet(data: dict):
         ]
         sheet.append_row(row)
         st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
+        st.info("✅ 구글 시트에 기록 성공!")      # ← 바로 화면 출력
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
+        st.error(f"📛 구글 시트 기록 실패: {e}")  # ← 바로 화면 출력!
 
 def load_user_progress(username: str):
     safe_name = get_safe_filename(username)
