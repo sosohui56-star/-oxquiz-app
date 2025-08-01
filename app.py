@@ -63,6 +63,7 @@ def connect_to_sheet():
     return sheet
 
 def log_to_sheet(data: dict):
+    st.warning("🟡 log_to_sheet 진입")   # <= 첫 줄에 추가
     try:
         sheet = connect_to_sheet()
         row = [
@@ -78,6 +79,7 @@ def log_to_sheet(data: dict):
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
         st.error(f"📛 구글 시트 기록 실패: {e}")  # ← 바로 화면 출력!
+
 
 def load_user_progress(username: str):
     safe_name = get_safe_filename(username)
