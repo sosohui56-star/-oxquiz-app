@@ -371,7 +371,8 @@ elif selected_file:
 else:
     ...
 # 열(헤더) 표시
-st.write("문제집의 열(헤더):", df_source.columns)
+if "df_source" in locals():
+    st.write("문제집의 열(헤더):", df_source.columns)
 
 # 5. 이전 선택과 현재 선택이 다르면...
 if st.session_state.prev_selected_file != file_label:
