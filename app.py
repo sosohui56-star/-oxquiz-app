@@ -428,58 +428,59 @@ def main_page() -> None:
         st.session_state.last_correct = correct
         st.session_state.last_qnum = str(qnum_display)
 
-    if st.session_state.answered and st.session_state.last_question is not None:
+       if st.session_state.answered and st.session_state.last_question is not None:
         last_q = st.session_state.last_question
         if "해설" in last_q and pd.notna(last_q["해설"]):
             st.info(f"📘 해설: {last_q['해설']}")
 
         rating_col1, rating_col2, rating_col3 = st.columns(3)
 
-    # --- 평점 버튼 ---
-if rating_col1.button("❌ 다시 보지 않기"):
-    update_question_rating(user_progress_file, st.session_state.last_qnum, "skip")
-    st.warning("log_to_sheet 실행직전!")   # ⬅️ 추가
-    log_to_sheet({
-        "timestamp": datetime.now().isoformat(),
-        "user_name": st.session_state.user_name,
-        "question_id": st.session_state.last_qnum,
-        "correct": st.session_state.last_correct,
-        "rating": "skip",
-    })
-    st.session_state.df = st.session_state.df[
-        st.session_state.df["문제번호"] != question["문제번호"]
-    ]
-    get_new_question()
-    st.session_state.answered = False
-    st.rerun()
+        # --- 평점 버튼 ---
+        if rating_col1.button("❌ 다시 보지 않기"):
+            update_question_rating(user_progress_file, st.session_state.last_qnum, "skip")
+            st.warning("log_to_sheet 실행직전!")   # ⬅️ 추가
+            log_to_sheet({
+                "timestamp": datetime.now().isoformat(),
+                "user_name": st.session_state.user_name,
+                "question_id": st.session_state.last_qnum,
+                "correct": st.session_state.last_correct,
+                "rating": "skip",
+            })
+            st.session_state.df = st.session_state.df[
+                st.session_state.df["문제번호"] != question["문제번호"]
+            ]
+            get_new_question()
+            st.session_state.answered = False
+            st.rerun()
 
-if rating_col2.button("📘 이해 50~90%"):
-    update_question_rating(user_progress_file, st.session_state.last_qnum, "mid")
-    st.warning("log_to_sheet 실행직전!")   # ⬅️ 추가
-    log_to_sheet({
-        "timestamp": datetime.now().isoformat(),
-        "user_name": st.session_state.user_name,
-        "question_id": st.session_state.last_qnum,
-        "correct": st.session_state.last_correct,
-        "rating": "mid",
-    })
-    get_new_question()
-    st.session_state.answered = False
-    st.rerun()
+        if rating_col2.button("📘 이해 50~90%"):
+            update_question_rating(user_progress_file, st.session_state.last_qnum, "mid")
+            st.warning("log_to_sheet 실행직전!")   # ⬅️ 추가
+            log_to_sheet({
+                "timestamp": datetime.now().isoformat(),
+                "user_name": st.session_state.user_name,
+                "question_id": st.session_state.last_qnum,
+                "correct": st.session_state.last_correct,
+                "rating": "mid",
+            })
+            get_new_question()
+            st.session_state.answered = False
+            st.rerun()
 
-if rating_col3.button("🔄 이해 50% 미만"):
-    update_question_rating(user_progress_file, st.session_state.last_qnum, "low")
-    st.warning("log_to_sheet 실행직전!")   # ⬅️ 추가
-    log_to_sheet({
-        "timestamp": datetime.now().isoformat(),
-        "user_name": st.session_state.user_name,
-        "question_id": st.session_state.last_qnum,
-        "correct": st.session_state.last_correct,
-        "rating": "low",
-    })
-    get_new_question()
-    st.session_state.answered = False
-    st.rerun()
+        if rating_col3.button("🔄 이해 50% 미만"):
+            update_question_rating(user_progress_file, st.session_state.last_qnum, "low")
+            st.warning("log_to_sheet 실행직전!")   # ⬅️ 추가
+            log_to_sheet({
+                "timestamp": datetime.now().isoformat(),
+                "user_name": st.session_state.user_name,
+                "question_id": st.session_state.last_qnum,
+                "correct": st.session_state.last_correct,
+                "rating": "low",
+            })
+            get_new_question()
+            st.session_state.answered = False
+            st.rerun()
+
 
 
     st.sidebar.markdown("———")
