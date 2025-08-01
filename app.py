@@ -587,16 +587,15 @@ if st.sidebar.button("❔ 오답 목록 보기"):
 
 
         # 주간 랭킹 보기 버튼
-        if st.sidebar.button("📈 주간 랭킹 보기"):
-            display_weekly_ranking()
-
-        # 오답 목록 보기 버튼
-        if st.sidebar.button("❔ 오답 목록 보기"):
-            if st.session_state.wrong_list:
-                wrong_df = pd.DataFrame(st.session_state.wrong_list)
-                st.subheader("❗ 오답 목록")
-                st.table(
-                    wrong_df[
+if st.sidebar.button("📈 주간 랭킹 보기"):
+display_weekly_ranking()
+# 오답 목록 보기 버튼
+if st.sidebar.button("❔ 오답 목록 보기"):
+if st.session_state.wrong_list:
+wrong_df = pd.DataFrame(st.session_state.wrong_list)
+st.subheader("❗ 오답 목록")
+st.table(
+wrong_df[
                         ["날짜", "문제번호", "단원명", "문제", "선택", "정답", "해설"]
                     ]
                 )
