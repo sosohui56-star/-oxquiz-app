@@ -519,15 +519,15 @@ if rating_col3.button("🔄 이해 50% 미만"):
     st.rerun()
 
   
-# 사이드바 요약 및 기타 기능 표시
+# 사이드바 요약 및 기타 기능 표시 (정확한 세션 변수 사용)
 st.sidebar.markdown("———")
 st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
-st.sidebar.markdown(f"✅ 정답 수: {st.session_state.correct_count}")
+st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
 st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
-st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total_count}")
-st.sidebar.markdown(f"📈 정답률: {accuracy:.1f}%")
-st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
-st.sidebar.markdown("Made with ❤️ for 흥민's 공부")
+st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
+st.sidebar.markdown(f"📈 정답률: {(st.session_state.score / st.session_state.total * 100) if st.session_state.total > 0 else 0:.1f}%")
+st.sidebar.markdown(f"📘 남은 문제: {st.session_state.df.shape[0] if st.session_state.df is not None else 0}")
+st.sidebar.markdown("Made c")
 
 # 오답 엑셀 저장 버튼
 if st.sidebar.button("📂 오답 엑셀로 저장"):
