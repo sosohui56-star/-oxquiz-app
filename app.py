@@ -533,17 +533,33 @@ def main_page() -> None:
   
 # 사이드바 요약 및 기타 기능 표시
 st.sidebar.markdown("———")
+
 if "user_name" in st.session_state:
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
 else:
     st.sidebar.markdown("👤 사용자: (로그인 전)")
-st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
-st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
-st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
-remaining = st.session_state.df.shape[0] if st.session_state.df is not None else 0
+
+if "score" in st.session_state:
+    st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
+else:
+    st.sidebar.markdown("✅ 정답 수: 0")
+
+if "wrong_list" in st.session_state:
+    st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
+else:
+    st.sidebar.markdown("❌ 오답 수: 0")
+
+if "total" in st.session_state:
+    st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
+else:
+    st.sidebar.markdown("📊 총 풀어 수: 0")
+
+if "df" in st.session_state and st.session_state.df is not None:
+    remaining = st.session_state.df.shape[0]
+else:
+    remaining = 0
 st.sidebar.markdown(f"📘 남은 문제: {remaining}")
 
-st.sidebar.markdown("Made with ❤️")
 
 
 def save_wrong_answers_to_excel():
