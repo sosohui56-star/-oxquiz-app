@@ -533,7 +533,10 @@ def main_page() -> None:
   
 # 사이드바 요약 및 기타 기능 표시
 st.sidebar.markdown("———")
-st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
+if "user_name" in st.session_state:
+    st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
+else:
+    st.sidebar.markdown("👤 사용자: (로그인 전)")
 st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
 st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
 st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
