@@ -529,22 +529,62 @@ st.sidebar.markdown(f"📈 정답률: {accuracy:.1f}%")
 st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
 st.sidebar.markdown("Made with ❤️ for 흥민's 공부")
 
-# 오답 엑셀 저장 버튼
-if st.sidebar.button("📂 오답 엑셀로 저장"):
-    if st.session_state.wrong_list:
-        wrong_df = pd.DataFrame(st.session_state.wrong_list)
-        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_name = get_safe_filename(st.session_state.user_name)
-        filename = f"{safe_name}_wrong_{timestamp_str}.xlsx"
-        display_name = f"{st.session_state.user_name}_오답_{timestamp_str}.xlsx"
-        try:
-            wrong_df.to_excel(filename, index=False)
-            st.sidebar.success(f"📁 {display_name} 파일로 저장 완료!")
-        except Exception as e:
-            st.sidebar.error(f"❗엑셀 파일을 저장하는 중 오류 발생: {e}")
 
-            else:
-                st.sidebar.warning("❗ 오답이 없습니다.")
+def save_wrong_answers_to_excel():
+    """
+    오답 리스트를 엑셀로 저장하는 기능을 수행합니다.
+    저장 후 성공/실패 메시지를 사이드바에 출력합니다.
+    """
+    if not st.session_state.wrong_list:
+        st.sidebar.warning("❗ 오답이 없습니다.")
+        return
+
+    wrong_df = pd.DataFrame(st.session_state.wrong_list)
+    timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = get_safe_filename(st.session_state.user_name)
+    filename = f"{safe_name}_wrong_{timestamp_str}.xlsx"
+    display_name = f"{st.session_state.user_name}_오답_{timestamp_str}.xlsx"
+    try:
+        wrong_df.to_excel(filename, index=False)
+        st.sidebar.success(f"📁 {display_name} 파일로 저장 완료!")
+    except Exception as e:
+        st.sidebar.error(f"❗엑셀 파일을 저장하는 중 오류 발생: {e}")
+
+
+def show_weekly_ranking():
+    """
+    주간 랭킹을 출력하는 기능을 수행합니다.
+    """
+    display_weekly_ranking()
+
+
+def show_wrong_list_table():
+    """
+    오답 리스트를 테이블로 출력하는 기능을 수행합니다.
+    """
+    if not st.session_state.wrong_list:
+        st.warning("❗ 오답이 없습니다.")
+        return
+
+    wrong_df = pd.DataFrame(st.session_state.wrong_list)
+    st.subheader("❗ 오답 목록")
+    st.table(
+        wrong_df[
+            ["날짜", "문제번호", "단원명", "문제", "선택", "정답", "해설"]
+        ]
+    )
+
+
+# 버튼 처리
+if st.sidebar.button("📂 오답 엑셀로 저장"):
+    save_wrong_answers_to_excel()
+
+if st.sidebar.button("📈 주간 랭킹 보기"):
+    show_weekly_ranking()
+
+if st.sidebar.button("❔ 오답 목록 보기"):
+    show_wrong_list_table()
+
 
         # 주간 랭킹 보기 버튼
         if st.sidebar.button("📈 주간 랭킹 보기"):
