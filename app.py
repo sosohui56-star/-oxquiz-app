@@ -220,6 +220,10 @@ def display_weekly_ranking() -> None:
         st.success(
             f"{st.session_state.user_name}님의 이번 주 풀이 수: {int(row['풀이수'])}개, 순위: {int(row['순위'])}위"
         )
+# 기록 성공/실패 메시지 표시
+if "sheet_log_status" in st.session_state:
+    st.info(st.session_state.sheet_log_status)
+    del st.session_state.sheet_log_status  # 다음엔 안 보이게 삭제
 
 def login_page() -> None:
     """로그인 페이지를 표시하고 로그인 상태를 관리합니다."""
