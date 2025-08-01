@@ -1,5 +1,6 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+import csv
 import re
 from io import BytesIO
 import json
@@ -42,6 +43,7 @@ def init_session_state():
         "df": None,
         "last_correct": None,
         "last_qnum": None,
+        "repeat_question": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -99,10 +101,8 @@ def display_weekly_ranking():
     st.subheader("📈 주간 랭킹")
     st.info("이 기능은 아직 구현 중입니다.")
 
-# 초기화
 init_session_state()
 
-# 로그인
 if not st.session_state.logged_in:
     st.title("🔐 이름을 입력하고 시작하세요")
     name = st.text_input("이름 입력")
@@ -112,7 +112,6 @@ if not st.session_state.logged_in:
         st.rerun()
     st.stop()
 
-# 사이드바
 st.sidebar.header("📁 메뉴")
 st.sidebar.write("👤 ", st.session_state.user_name)
 if st.sidebar.button("📈 주간 랭킹 보기"):
@@ -122,7 +121,6 @@ if st.sidebar.button("❔ 오답 목록 보기"):
 if st.sidebar.button("📂 오답 엑셀로 저장"):
     save_wrong_list_to_excel()
 
-# 문제 로딩
 st.sidebar.markdown("---")
 quiz_file = st.sidebar.file_uploader("문제 파일 업로드 (CSV)", type=["csv"])
 selected_repo_file = st.sidebar.selectbox("또는 저장소 문제 선택", ["(선택안함)"] + REPO_CSV_FILES)
@@ -147,7 +145,6 @@ if df.empty:
     st.warning("선택한 단원의 문제가 없습니다.")
     st.stop()
 
-# 단원별 통계 요약
 if st.sidebar.button("📊 단원별 정답률 보기"):
     full_df = st.session_state.df
     if full_df is not None:
@@ -165,9 +162,13 @@ if st.sidebar.button("📊 단원별 정답률 보기"):
         st.subheader("📊 단원별 정답률 요약")
         st.dataframe(result.reset_index())
 
-# 문제 풀기
 if not st.session_state.answered:
-    question = df.sample(1).iloc[0]
+    if st.session_state.repeat_question:
+        question = st.session_state.repeat_question
+        st.session_state.repeat_question = None
+    else:
+        question = df.sample(1).iloc[0]
+
     st.session_state.question = question
     st.session_state.last_qnum = question['문제번호']
     st.write(f"### 문제 {question['문제번호']}: {question['문제']}")
@@ -186,21 +187,32 @@ if not st.session_state.answered:
         st.rerun()
 else:
     correct = st.session_state.last_correct
-    if correct:     st.success("정답입니다! 👏") else:     st.error("오답입니다. 다시 복습하세요! ❌")     st.markdown(f"**해설:** {st.session_state.question.get('해설', '없음')}")
+    if correct:
+        st.success("정답입니다! 👏")
+    else:
+        st.error("오답입니다. 다시 복습하세요! ❌")
+        st.markdown(f"**해설:** {st.session_state.question.get('해설', '없음')}")
+
     st.write("#### 📊 해당 문제에 대한 이해도는 어느 정도였나요?")
     col1, col2, col3 = st.columns(3)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     qid = st.session_state.last_qnum
     user = st.session_state.user_name
+
     if col1.button("❌ 다시 보지 않기"):
         log_to_sheet(now, user, qid, correct, "다시보지않기")
         st.session_state.answered = False
+        st.session_state.repeat_question = None
         st.rerun()
+
     if col2.button("🤔 50~90% 이해"):
         log_to_sheet(now, user, qid, correct, "중간이해")
         st.session_state.answered = False
+        st.session_state.repeat_question = None
         st.rerun()
+
     if col3.button("❗ 50% 미만 이해"):
         log_to_sheet(now, user, qid, correct, "미흡")
         st.session_state.answered = False
+        st.session_state.repeat_question = st.session_state.question
         st.rerun()
