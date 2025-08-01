@@ -362,10 +362,12 @@ def main_page_old() -> None:
     # implementation is provided in `main_page()`.
     return
 
-
-# 5. 이전 선택과 현재 선택이 다르면...
-if st.session_state.prev_selected_file != file_label:
-    st.session_state.prev_selected_file = file_label
+def run_app():
+    init_session_state()
+    # 그 다음에만 세션 접근
+    ...
+if __name__ == "__main__":
+    run_app()
 
 # 6. 단원 목록 확보
 try:
