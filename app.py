@@ -2,10 +2,10 @@ import os
 from datetime import datetime
 import csv
 import re
+import json
 import pandas as pd
 import streamlit as st
 import gspread
-import json
 from oauth2client.service_account import ServiceAccountCredentials
 from io import BytesIO
 
@@ -96,6 +96,9 @@ def evaluate_rating(correct: bool) -> str:
 
 def process_answer(user_answer: str):
     question = st.session_state.question
+    if not question:
+        st.warning("질문이 비어 있습니다.")
+        return
     correct = question["정답"] == user_answer
     rating = evaluate_rating(correct)
     st.session_state.last_correct = correct
@@ -108,6 +111,10 @@ def process_answer(user_answer: str):
         "rating": rating
     })
 
+def display_weekly_ranking():
+    st.subheader("📈 주간 랭킹")
+    st.info("이 기능은 아직 구현 중입니다. 다음 업데이트에서 제공될 예정입니다.")
+
 # Streamlit 사이드바 버튼 처리
 if st.sidebar.button("📈 주간 랭킹 보기"):
     display_weekly_ranking()
@@ -117,6 +124,3 @@ if st.sidebar.button("❔ 오답 목록 보기"):
 
 if st.sidebar.button("📂 오답 엑셀로 저장"):
     save_wrong_list_to_excel()
-  def display_weekly_ranking():
-    st.subheader("📈 주간 랭킹")
-    st.info("이 기능은 아직 구현 중입니다. 다음 업데이트에서 제공될 예정입니다.")
