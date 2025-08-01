@@ -352,43 +352,31 @@ def main_page() -> None:
     # 3. 사용자 진행 정보 로딩 (skip/low 문제번호 등)
     skip_ids, low_ids, user_progress_file = load_user_progress(st.session_state.user_name)
 
-    # 4. 업로드 or 선택된 파일을 불러오는 부분
-    if uploaded_file:
-        try:
-            df_source = pd.read_csv(uploaded_file)
-            file_label = uploaded_file.name
-            st.success("업로드된 문제집 파일을 불러왔습니다!")
-        except Exception as e:
-            st.error(f"CSV 파일을 읽는 중 오류: {e}")
-            return
-    elif selected_file:
-        try:
-            df_source = pd.read_csv(selected_file)
-            file_label = selected_file
-            st.success(f"{selected_file} 파일을 불러왔습니다!")
-        except Exception as e:
-            st.error(f"로컬 파일 읽기 오류: {e}")
-            return
-    else:
-        st.warning("문제집 파일을 업로드하거나 선택하세요.")
-        return
-
-    # 실제 열(헤더) 이름이 뭔지 출력!
-    st.write("문제집의 열(헤더):", df_source.columns)
-
-    # 5. 이전 선택과 현재 선택이 다르면 데이터 다시 로딩
-    if st.session_state.prev_selected_file != file_label:
-        st.session_state.prev_selected_file = file_label
-
- # 6. 단원 목록 확보
+ # 4. 업로드 or 선택된 파일을 불러오는 부분
+if uploaded_file:
     try:
-        if isinstance(df_source, pd.DataFrame):
-            df_loaded_temp = df_source.copy()
-        else:
-            df_loaded_temp = pd.read_csv(df_source)
+        ...
     except Exception as e:
-        st.error(f"{file_label} 파일을 읽는 중 오류가 발생했습니다: {e}")
-        return
+        ...
+elif selected_file:
+    try:
+        ...
+    except Exception as e:
+        ...
+else:
+    ...
+# 열(헤더) 표시
+st.write("문제집의 열(헤더):", df_source.columns)
+
+# 5. 이전 선택과 현재 선택이 다르면...
+if st.session_state.prev_selected_file != file_label:
+    st.session_state.prev_selected_file = file_label
+
+# 6. 단원 목록 확보
+try:
+    ...
+except Exception as e:
+    ...
 
   # 필수 컬럼 확인
     if "문제" not in df_loaded_temp.columns or "정답" not in df_loaded_temp.columns:
