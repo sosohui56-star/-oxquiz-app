@@ -167,9 +167,8 @@ if not st.session_state.answered:
         question = st.session_state.repeat_question
         st.session_state.repeat_question = None
     else:
-        if "question" not in st.session_state or st.session_state.answered:
+if "question" not in st.session_state or st.session_state.answered:
     st.session_state.question = df.sample(1).iloc[0]
-
 question = st.session_state.question
 st.write(f"### 문제 {question['문제번호']}: {question['문제']}")
 ...
