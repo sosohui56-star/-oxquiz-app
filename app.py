@@ -5,6 +5,11 @@ import re
 
 import pandas as pd
 import streamlit as st
+
+# ⬇⬇⬇ 파일 선택 위젯 정의 ⬇⬇⬇
+uploaded_file = st.file_uploader("문제 CSV 업로드", type="csv")
+file_list = ["tax.csv", "jungGae.csv", "min.csv", "oxquiz_progress_log.csv"]
+selected_file = st.selectbox("또는 기존 문제집 선택", file_list)
 import gspread
 import json
 from oauth2client.service_account import ServiceAccountCredentials
