@@ -186,7 +186,7 @@ if not st.session_state.answered:
         st.rerun()
 else:
     correct = st.session_state.last_correct
-    st.success("정답입니다! 👏") if correct else st.error("오답입니다. 다시 복습하세요! ❌")
+    if correct:     st.success("정답입니다! 👏") else:     st.error("오답입니다. 다시 복습하세요! ❌")     st.markdown(f"**해설:** {st.session_state.question.get('해설', '없음')}")
     st.write("#### 📊 해당 문제에 대한 이해도는 어느 정도였나요?")
     col1, col2, col3 = st.columns(3)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
