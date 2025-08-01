@@ -148,7 +148,7 @@ if not st.session_state.logged_in:
         st.session_state.user_name = name
         st.session_state.logged_in = True
         record_user_activity()
-        st.experimental_rerun()
+        st.rerun()
     st.stop()
 
 # 문제 파일 업로드
@@ -167,7 +167,7 @@ if quiz_file:
         choice = st.radio("선택", ["O", "X"])
         if st.button("제출"):
             process_answer(choice)
-            st.experimental_rerun()
+            st.rerun()
     else:
         if st.session_state.last_correct:
             st.success("정답입니다!")
@@ -175,7 +175,7 @@ if quiz_file:
             st.error("오답입니다.")
         if st.button("다음 문제"):
             st.session_state.answered = False
-            st.experimental_rerun()
+            st.rerun()
 
 # 사이드바 버튼 UI
 if st.sidebar.button("📈 주간 랭킹 보기"):
