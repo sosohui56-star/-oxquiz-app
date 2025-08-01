@@ -63,22 +63,21 @@ def connect_to_sheet():
     return sheet
 
 def log_to_sheet(data: dict):
-    st.warning("🟡 log_to_sheet 진입")   # <= 첫 줄에 추가
     try:
         sheet = connect_to_sheet()
         row = [
-            data.get("timestamp"),
-            data.get("user_name"),
-            data.get("question_id"),
-            data.get("correct"),
-            data.get("rating"),
+            str(data.get("timestamp")),
+            str(data.get("user_name")),
+            str(data.get("question_id")),
+            str(data.get("correct")),
+            str(data.get("rating")),
         ]
         sheet.append_row(row)
         st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
-        st.info("✅ 구글 시트에 기록 성공!")      # ← 바로 화면 출력
+        st.info("✅ 구글 시트에 기록 성공!")
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
-        st.error(f"📛 구글 시트 기록 실패: {e}")  # ← 바로 화면 출력!
+        st.error(f"📛 구글 시트 기록 실패: {e}")
 
 
 def load_user_progress(username: str):
