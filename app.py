@@ -428,8 +428,10 @@ def main_page() -> None:
         st.session_state.last_correct = correct
         st.session_state.last_qnum = str(qnum_display)
 
- if st.session_state.answered and st.session_state.last_question is not None:
+    # If the user has answered the previous question, show the explanation and rating buttons
+    if st.session_state.answered and st.session_state.last_question is not None:
         last_q = st.session_state.last_question
+        # Display an explanation if available
         if "해설" in last_q and pd.notna(last_q["해설"]):
             st.info(f"📘 해설: {last_q['해설']}")
         rating_col1, rating_col2, rating_col3 = st.columns(3)
@@ -445,6 +447,7 @@ def main_page() -> None:
                 "correct": st.session_state.last_correct,
                 "rating": "skip",
             })
+            # Remove the question from the current data frame so it won't be asked again
             st.session_state.df = st.session_state.df[
                 st.session_state.df["문제번호"] != question["문제번호"]
             ]
