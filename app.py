@@ -518,29 +518,31 @@ if rating_col3.button("🔄 이해 50% 미만"):
     st.session_state.answered = False
     st.rerun()
 
-        # 사이드바 요약 및 기타 기능 표시
-        st.sidebar.markdown("---")
-        st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
-        st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
-        st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
-        st.sidebar.markdown(f"📊 총 풀이 수: {st.session_state.total}")
-        st.sidebar.markdown(f"🎯 정답률: {accuracy:.1f}%")
-        st.sidebar.markdown(f"📝 남은 문제: {remaining}개")
-        st.sidebar.markdown("Made with ❤️ for 공인중개사 수험생")
+  
+# 사이드바 요약 및 기타 기능 표시
+st.sidebar.markdown("———")
+st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
+st.sidebar.markdown(f"✅ 정답 수: {st.session_state.correct_count}")
+st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
+st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total_count}")
+st.sidebar.markdown(f"📈 정답률: {accuracy:.1f}%")
+st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
+st.sidebar.markdown("Made with ❤️ for 흥민's 공부")
 
-        # 오답 엑셀 저장 버튼
-        if st.sidebar.button("🗂️ 오답 엑셀로 저장"):
-            if st.session_state.wrong_list:
-                wrong_df = pd.DataFrame(st.session_state.wrong_list)
-                timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                safe_name = get_safe_filename(st.session_state.user_name)
-                filename = f"{safe_name}_wrong_{timestamp_str}.xlsx"
-                display_name = f"{st.session_state.user_name}_오답_{timestamp_str}.xlsx"
-                try:
-                    wrong_df.to_excel(filename, index=False)
-                    st.sidebar.success(f"📁 {display_name} 저장 완료!")
-                except Exception as e:
-                    st.sidebar.error(f"엑셀 파일을 저장하는 데 실패했습니다: {e}")
+# 오답 엑셀 저장 버튼
+if st.sidebar.button("📂 오답 엑셀로 저장"):
+    if st.session_state.wrong_list:
+        wrong_df = pd.DataFrame(st.session_state.wrong_list)
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = get_safe_filename(st.session_state.user_name)
+        filename = f"{safe_name}_wrong_{timestamp_str}.xlsx"
+        display_name = f"{st.session_state.user_name}_오답_{timestamp_str}.xlsx"
+        try:
+            wrong_df.to_excel(filename, index=False)
+            st.sidebar.success(f"📁 {display_name} 파일로 저장 완료!")
+        except Exception as e:
+            st.sidebar.error(f"❗엑셀 파일을 저장하는 중 오류 발생: {e}")
+
             else:
                 st.sidebar.warning("❗ 오답이 없습니다.")
 
