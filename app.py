@@ -163,20 +163,35 @@ if st.sidebar.button("📊 단원별 정답률 보기"):
         st.dataframe(result.reset_index())
 
 if not st.session_state.answered:
+    # 반복 출제할 문제 우선 사용
     if st.session_state.repeat_question:
         question = st.session_state.repeat_question
         st.session_state.repeat_question = None
     else:
-if "question" not in st.session_state or st.session_state.answered:
-    st.session_state.question = df.sample(1).iloc[0]
-question = st.session_state.question
-st.write(f"### 문제 {question['문제번호']}: {question['문제']}")
-...
-wrong_entry = question.to_dict()
+        if "question" not in st.session_state or st.session_state.answered:
+            st.session_state.question = df.sample(1).iloc[0]
+
+        question = st.session_state.question
+
+    st.session_state.last_qnum = question['문제번호']
+    st.write(f"### 문제 {question['문제번호']}: {question['문제']}")
+    user_choice = st.radio("정답을 선택하세요", ["O", "X"])
+
+    if st.button("제출"):
+        correct = (user_choice == question['정답'])
+        st.session_state.answered = True
+        st.session_state.last_correct = correct
+        st.session_state.score += int(correct)
+        st.session_state.total += 1
+
+        if not correct:
+            wrong_entry = question.to_dict()
             wrong_entry["날짜"] = datetime.now().strftime("%Y-%m-%d")
             wrong_entry["선택"] = user_choice
             st.session_state.wrong_list.append(wrong_entry)
+
         st.rerun()
+
 else:
     correct = st.session_state.last_correct
     if correct:
