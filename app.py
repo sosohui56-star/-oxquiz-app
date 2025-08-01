@@ -81,16 +81,8 @@ def connect_to_sheet():
 def log_to_sheet(data: dict):
     """
     풀이 데이터를 구글 스프레드시트에 기록합니다.
-
-    data 예시:
-        {
-            "timestamp": "2025-01-01T12:00:00",
-            "user_name": "홍길동",
-            "question_id": "42",
-            "correct": True,
-            "rating": "mid"
-        }
     """
+    st.warning("log_to_sheet 호출됨")   # ← 추가 (이 자리가 중요!)
     try:
         sheet = connect_to_sheet()
         row = [
@@ -102,8 +94,7 @@ def log_to_sheet(data: dict):
         ]
         sheet.append_row(row)
     except Exception as e:
-        # 구글 시트 기록 실패 시 사용자에게 경고
-        st.warning(f"📛 구글 시트 기록 실패: {e}")
+        st.error(f"📛 구글 시트 기록 실패: {e}")   # ← error로 바꾸는 것도 중요!
 
 def load_user_progress(username: str):
     """
