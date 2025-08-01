@@ -362,22 +362,6 @@ def main_page_old() -> None:
     # implementation is provided in `main_page()`.
     return
 
-# 4. 업로드 or 선택된 파일을 불러오는 부분
-if uploaded_file:
-    try:
-        ...
-    except Exception as e:
-        ...
-elif selected_file:
-    try:
-        ...
-    except Exception as e:
-        ...
-else:
-    ...
-# 열(헤더) 표시
-if "df_source" in locals():
-    st.write("문제집의 열(헤더):", df_source.columns)
 
 # 5. 이전 선택과 현재 선택이 다르면...
 if st.session_state.prev_selected_file != file_label:
