@@ -352,7 +352,7 @@ def main_page() -> None:
     # 3. 사용자 진행 정보 로딩 (skip/low 문제번호 등)
     skip_ids, low_ids, user_progress_file = load_user_progress(st.session_state.user_name)
 
- # 4. 업로드 or 선택된 파일을 불러오는 부분
+# 4. 업로드 or 선택된 파일을 불러오는 부분
 if uploaded_file:
     try:
         ...
@@ -378,7 +378,7 @@ try:
 except Exception as e:
     ...
 
- # 필수 컬럼 확인
+# 필수 컬럼 확인
 if "문제" not in df_loaded_temp.columns or "정답" not in df_loaded_temp.columns:
     st.error("CSV 파일에 '문제' 또는 '정답' 열이 없습니다.")
     st.stop()  # ✅ 함수 밖에서는 return 대신 st.stop() 사용!
@@ -404,7 +404,7 @@ if "문제" not in df_loaded_temp.columns or "정답" not in df_loaded_temp.colu
         get_new_question()
 
     # 문제가 없으면 종료
-   if st.session_state.question is None:
+if st.session_state.question is None:
     st.info("선택한 단원에 문제 데이터가 없거나, 이전에 모두 풀었습니다.")
     st.stop()
 
@@ -463,7 +463,7 @@ if "문제" not in df_loaded_temp.columns or "정답" not in df_loaded_temp.colu
         st.session_state.last_correct = correct
         st.session_state.last_qnum = str(qnum_display)
 
-       # 정답/오답 후 해설과 평점 버튼 표시
+    # 정답/오답 후 해설과 평점 버튼 표시
     if st.session_state.answered and st.session_state.last_question is not None:
         last_q = st.session_state.last_question
 
@@ -516,7 +516,7 @@ if "문제" not in df_loaded_temp.columns or "정답" not in df_loaded_temp.colu
             st.session_state.answered = False
             st.rerun()
 
-  
+
 # 사이드바 요약 및 기타 기능 표시
 st.sidebar.markdown("———")
 
