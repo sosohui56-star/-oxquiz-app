@@ -355,19 +355,31 @@ def main_page() -> None:
     # 3. 사용자 진행 정보 로딩 (skip/low 문제번호 등)
     skip_ids, low_ids, user_progress_file = load_user_progress(st.session_state.user_name)
 
-    # 4. 데이터 원본 결정
+    # 4. 업로드 or 선택된 파일을 불러오는 부분
     if uploaded_file:
         try:
             df_source = pd.read_csv(uploaded_file)
             file_label = uploaded_file.name
+            st.success("업로드된 문제집 파일을 불러왔습니다!")
         except Exception as e:
-            st.error(f"업로드된 파일을 읽는 중 오류가 발생했습니다: {e}")
+            st.error(f"CSV 파일을 읽는 중 오류: {e}")
+            return
+    elif selected_file:
+        try:
+            df_source = pd.read_csv(selected_file)
+            file_label = selected_file
+            st.success(f"{selected_file} 파일을 불러왔습니다!")
+        except Exception as e:
+            st.error(f"로컬 파일 읽기 오류: {e}")
             return
     else:
-        df_source = selected_file
-        file_label = selected_file
+        st.warning("문제집 파일을 업로드하거나 선택하세요.")
+        return
 
-  # 5. 이전 선택과 현재 선택이 다르면 데이터 다시 로딩
+    # 실제 열(헤더) 이름이 뭔지 출력!
+    st.write("문제집의 열(헤더):", df_source.columns)
+
+    # 5. 이전 선택과 현재 선택이 다르면 데이터 다시 로딩
     if st.session_state.prev_selected_file != file_label:
         st.session_state.prev_selected_file = file_label
 
@@ -465,69 +477,70 @@ def main_page() -> None:
         st.session_state.last_correct = correct
         st.session_state.last_qnum = str(qnum_display)
 
-    # 정답/오답 후 해설과 평점 버튼 표시
+       # 정답/오답 후 해설과 평점 버튼 표시
     if st.session_state.answered and st.session_state.last_question is not None:
         last_q = st.session_state.last_question
 
-# 해설이 있으면 표시
-if "해설" in last_q and pd.notna(last_q["해설"]):
-    st.info(f"📘 해설: {last_q['해설']}")
+        # 해설이 있으면 표시
+        if "해설" in last_q and pd.notna(last_q["해설"]):
+            st.info(f"📘 해설: {last_q['해설']}")
 
-# 해설 유무와 상관없이 평점 버튼 항상 표시
-rating_col1, rating_col2, rating_col3 = st.columns(3)
+        # 평점 버튼
+        rating_col1, rating_col2, rating_col3 = st.columns(3)
 
-if rating_col1.button("❌ 다시 보지 않기"):
-    update_question_rating(user_progress_file, st.session_state.last_qnum, "skip")
-    log_to_sheet({
-        "timestamp": datetime.now().isoformat(),
-        "user_name": st.session_state.user_name,
-        "question_id": st.session_state.last_qnum,
-        "correct": st.session_state.last_correct,
-        "rating": "skip",
-    })
-    st.session_state.df = st.session_state.df[
-        st.session_state.df["문제번호"] != question["문제번호"]
-    ]
-    get_new_question()
-    st.session_state.answered = False
-    st.rerun()
+        if rating_col1.button("❌ 다시 보지 않기"):
+            update_question_rating(user_progress_file, st.session_state.last_qnum, "skip")
+            log_to_sheet({
+                "timestamp": datetime.now().isoformat(),
+                "user_name": st.session_state.user_name,
+                "question_id": st.session_state.last_qnum,
+                "correct": st.session_state.last_correct,
+                "rating": "skip",
+            })
+            st.session_state.df = st.session_state.df[
+                st.session_state.df["문제번호"] != question["문제번호"]
+            ]
+            get_new_question()
+            st.session_state.answered = False
+            st.rerun()
 
-if rating_col2.button("📘 이해 50~90%"):
-    update_question_rating(user_progress_file, st.session_state.last_qnum, "mid")
-    log_to_sheet({
-        "timestamp": datetime.now().isoformat(),
-        "user_name": st.session_state.user_name,
-        "question_id": st.session_state.last_qnum,
-        "correct": st.session_state.last_correct,
-        "rating": "mid",
-    })
-    get_new_question()
-    st.session_state.answered = False
-    st.rerun()
+        if rating_col2.button("📘 이해 50~90%"):
+            update_question_rating(user_progress_file, st.session_state.last_qnum, "mid")
+            log_to_sheet({
+                "timestamp": datetime.now().isoformat(),
+                "user_name": st.session_state.user_name,
+                "question_id": st.session_state.last_qnum,
+                "correct": st.session_state.last_correct,
+                "rating": "mid",
+            })
+            get_new_question()
+            st.session_state.answered = False
+            st.rerun()
 
-if rating_col3.button("🔄 이해 50% 미만"):
-    update_question_rating(user_progress_file, st.session_state.last_qnum, "low")
-    log_to_sheet({
-        "timestamp": datetime.now().isoformat(),
-        "user_name": st.session_state.user_name,
-        "question_id": st.session_state.last_qnum,
-        "correct": st.session_state.last_correct,
-        "rating": "low",
-    })
-    get_new_question()
-    st.session_state.answered = False
-    st.rerun()
+        if rating_col3.button("🔄 이해 50% 미만"):
+            update_question_rating(user_progress_file, st.session_state.last_qnum, "low")
+            log_to_sheet({
+                "timestamp": datetime.now().isoformat(),
+                "user_name": st.session_state.user_name,
+                "question_id": st.session_state.last_qnum,
+                "correct": st.session_state.last_correct,
+                "rating": "low",
+            })
+            get_new_question()
+            st.session_state.answered = False
+            st.rerun()
 
   
 # 사이드바 요약 및 기타 기능 표시
 st.sidebar.markdown("———")
 st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
-st.sidebar.markdown(f"✅ 정답 수: {st.session_state.correct_count}")
+st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
 st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
-st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total_count}")
-st.sidebar.markdown(f"📈 정답률: {accuracy:.1f}%")
-st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
-st.sidebar.markdown("Made with ❤️ for 흥민's 공부")
+st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
+remaining = st.session_state.df.shape[0] if st.session_state.df is not None else 0
+st.sidebar.markdown(f"📘 남은 문제: {remaining}")
+
+st.sidebar.markdown("Made with ❤️ )
 
 
 def save_wrong_answers_to_excel():
@@ -585,12 +598,6 @@ if st.sidebar.button("📈 주간 랭킹 보기"):
 if st.sidebar.button("❔ 오답 목록 보기"):
     show_wrong_list_table()
 
-
-        # 주간 랭킹 보기 버튼
-if st.sidebar.button("📈 주간 랭킹 보기"):
-display_weekly_ranking()
-# 오답 목록 보기 버튼
-if st.sidebar.button("❔ 오답 목록 보기"):
 if st.session_state.wrong_list:
 wrong_df = pd.DataFrame(st.session_state.wrong_list)
 st.subheader("❗ 오답 목록")
