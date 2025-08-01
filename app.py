@@ -6,10 +6,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-# ⬇⬇⬇ 파일 선택 위젯 정의 ⬇⬇⬇
-uploaded_file = st.file_uploader("문제 CSV 업로드", type="csv")
-file_list = ["tax.csv", "jungGae.csv", "min.csv", "oxquiz_progress_log.csv"]
-selected_file = st.selectbox("또는 기존 문제집 선택", file_list)
+# 파일 선택 위젯은 `main_page()` 함수에서 동적으로 생성됩니다.
 import gspread
 import json
 from oauth2client.service_account import ServiceAccountCredentials
@@ -328,9 +325,13 @@ def get_new_question() -> None:
     else:
         st.session_state.question = None
 
-def main_page() -> None:
+def main_page_old() -> None:
     """퀴즈의 메인 페이지를 표시하고 문제풀이 로직을 처리합니다."""
-    st.title("📘 공인중개사 OX 퀴즈")
+    # NOTE: This function is retained only for backward compatibility and is no longer
+    # used by the application. The updated quiz logic lives in the new
+    # `main_page()` function defined below.  We return immediately to avoid
+    # executing the old, partially implemented logic.
+    st.title("📘 공인중개사 OX 퀴즈 (Deprecated)")
     st.sidebar.header("📂 문제집 선택")
 
     # 1. CSV 업로드 기능
@@ -356,6 +357,10 @@ def main_page() -> None:
 
     # 3. 사용자 진행 정보 로딩 (skip/low 문제번호 등)
     skip_ids, low_ids, user_progress_file = load_user_progress(st.session_state.user_name)
+
+    # Disable the remainder of this function by returning early.  The new
+    # implementation is provided in `main_page()`.
+    return
 
 # 4. 업로드 or 선택된 파일을 불러오는 부분
 if uploaded_file:
@@ -523,34 +528,7 @@ if st.session_state.question is None:
             st.rerun()
 
 
-# 사이드바 요약 및 기타 기능 표시
-st.sidebar.markdown("———")
-
-if "user_name" in st.session_state:
-    st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
-else:
-    st.sidebar.markdown("👤 사용자: (로그인 전)")
-
-if "score" in st.session_state:
-    st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
-else:
-    st.sidebar.markdown("✅ 정답 수: 0")
-
-if "wrong_list" in st.session_state:
-    st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
-else:
-    st.sidebar.markdown("❌ 오답 수: 0")
-
-if "total" in st.session_state:
-    st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
-else:
-    st.sidebar.markdown("📊 총 풀어 수: 0")
-
-if "df" in st.session_state and st.session_state.df is not None:
-    remaining = st.session_state.df.shape[0]
-else:
-    remaining = 0
-st.sidebar.markdown(f"📘 남은 문제: {remaining}")
+# 사이드바 요약 및 버튼 처리는 새로운 `main_page()`에서 수행됩니다.
 
 
 
@@ -599,15 +577,240 @@ def show_wrong_list_table():
     )
 
 
-# 버튼 처리
-if st.sidebar.button("📂 오답 엑셀로 저장"):
-    save_wrong_answers_to_excel()
+# -----------------------------------------------------------------------------
+# New main_page implementation
+#
+# The original `main_page()` function has been renamed to `main_page_old()` and
+# is no longer used.  This new version fully encapsulates the quiz logic,
+# including file upload/selection, question display, answer handling, rating,
+# and sidebar summaries.  It avoids executing any Streamlit code at module
+# import time, ensuring that session state is initialized before access.
 
-if st.sidebar.button("📈 주간 랭킹 보기"):
-    show_weekly_ranking()
+def main_page() -> None:
+    """퀴즈의 메인 페이지를 표시하고 문제풀이 로직을 처리합니다."""
+    # 타이틀 및 사이드바 설정
+    st.title("📘 공인중개사 OX 퀴즈")
+    st.sidebar.header("📂 문제집 선택")
 
-if st.sidebar.button("❔ 오답 목록 보기"):
-    show_wrong_list_table()
+    # 기록 성공/실패 메시지 표시 (구글 시트)
+    if "sheet_log_status" in st.session_state:
+        # 표시 후 한 번만 보여주기 위해 삭제
+        st.info(st.session_state.sheet_log_status)
+        del st.session_state.sheet_log_status
+
+    # 1. CSV 업로드/선택 기능
+    uploaded_file = st.sidebar.file_uploader("문제집 업로드(CSV)", type=["csv"])
+    # 현재 작업 디렉터리 내 CSV 파일 목록을 표시
+    csv_files = [f for f in os.listdir() if f.endswith(".csv")]
+    selected_file = st.sidebar.selectbox("로컬 CSV 선택", csv_files)
+
+    # 2. 학습 진행 정보 표시 (정답률, 남은 문제)
+    if st.session_state.total > 0:
+        accuracy = (st.session_state.score / st.session_state.total) * 100
+    else:
+        accuracy = 0.0
+    st.sidebar.markdown(f"🎯 정답률: {accuracy:.1f}%")
+    remaining_local = st.session_state.df.shape[0] if st.session_state.df is not None else 0
+    st.sidebar.markdown(f"📝 남은 문제: {remaining_local}개")
+
+    # 사용자가 파일을 업로드하거나 선택하지 않았을 경우 안내
+    if not uploaded_file and not selected_file:
+        st.warning("⚠️ CSV 문제 파일을 업로드하거나 선택하세요.")
+        return
+
+    # 3. 사용자 진행 정보 로딩 (skip/low 문제번호 등)
+    skip_ids, low_ids, user_progress_file = load_user_progress(st.session_state.user_name)
+
+    # 4. 업로드 or 선택된 파일을 불러오기
+    df_source = None
+    file_label = None
+    if uploaded_file is not None:
+        try:
+            df_source = pd.read_csv(uploaded_file)
+            file_label = uploaded_file.name
+        except Exception as e:
+            st.error(f"업로드된 CSV를 읽는 중 오류가 발생했습니다: {e}")
+            return
+    elif selected_file:
+        try:
+            df_source = pd.read_csv(selected_file)
+            file_label = selected_file
+        except Exception as e:
+            st.error(f"{selected_file} 파일을 읽는 중 오류가 발생했습니다: {e}")
+            return
+
+    # 데이터프레임이 로딩되지 않은 경우 종료
+    if df_source is None:
+        st.warning("CSV 데이터를 불러오지 못했습니다.")
+        return
+
+    # 열(헤더) 표시
+    st.write("문제집의 열(헤더):", df_source.columns)
+
+    # 필수 컬럼 확인
+    if "문제" not in df_source.columns or "정답" not in df_source.columns:
+        st.error("CSV 파일에 '문제' 또는 '정답' 열이 없습니다.")
+        st.stop()
+
+    # 결측값 제거
+    df_loaded_temp = df_source.dropna(subset=["문제", "정답"])
+
+    # 단원 목록 확보
+    if "단원명" in df_loaded_temp.columns:
+        chapters = sorted(df_loaded_temp["단원명"].dropna().unique())
+    else:
+        chapters = []
+    selected_chapter = st.sidebar.selectbox(
+        "특정 단원만 푸시겠습니까?", ["전체 보기"] + chapters
+    )
+
+    # 5. 단원 또는 파일이 변경되었거나 데이터프레임이 비어 있으면 데이터 로딩 수행
+    if (
+        st.session_state.prev_selected_chapter != selected_chapter
+        or st.session_state.prev_selected_file != file_label
+        or st.session_state.df is None
+    ):
+        st.session_state.prev_selected_chapter = selected_chapter
+        st.session_state.prev_selected_file = file_label
+        load_and_filter_data(df_source, selected_chapter, skip_ids, low_ids)
+
+    # 6. 현재 문제 없으면 새 문제 선택
+    if st.session_state.question is None:
+        get_new_question()
+
+    # 문제가 없으면 종료
+    if st.session_state.question is None:
+        st.info("선택한 단원에 문제 데이터가 없거나, 이전에 모두 풀었습니다.")
+        st.stop()
+
+    # 7. 문제 표시
+    question = st.session_state.question
+    qnum = question["문제번호"]
+    try:
+        qnum_display = int(qnum)
+    except Exception:
+        qnum_display = qnum
+
+    st.markdown(f"📚 단원명: {question.get('단원명','')} | 문제번호: {qnum_display}")
+    st.markdown(f"❓ {question['문제']}")
+
+    # 8. 사용자의 선택 처리 (O/X/모름)
+    user_answer = None
+    col1, col2, col3 = st.columns(3)
+    if col1.button("⭕ O"):
+        user_answer = "O"
+    elif col2.button("❌ X"):
+        user_answer = "X"
+    elif col3.button("⁉️ 모름"):
+        user_answer = "모름"
+
+    if user_answer:
+        # 총 풀이수 증가 및 최근 질문 정보 저장
+        st.session_state.total += 1
+        st.session_state.answered = True
+        st.session_state.last_question = question.copy()
+        record_user_activity()
+
+        # 정답 여부 판별
+        correct = False
+        if user_answer == question["정답"]:
+            st.session_state.score += 1
+            correct = True
+            st.success("✅ 정답입니다!")
+        else:
+            # 오답 기록에 추가
+            st.session_state.wrong_list.append({
+                "이름": st.session_state.user_name,
+                "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "문제번호": qnum_display,
+                "단원명": question.get("단원명", ""),
+                "문제": question["문제"],
+                "정답": question["정답"],
+                "선택": user_answer,
+                "해설": question["해설"] if "해설" in question and pd.notna(question["해설"]) else "",
+            })
+            st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
+
+        # 나중에 평점 버튼 클릭 시 사용할 값 저장
+        st.session_state.last_correct = correct
+        st.session_state.last_qnum = str(qnum_display)
+
+    # 9. 정답/오답 후 해설과 평점 버튼 표시
+    if st.session_state.answered and st.session_state.last_question is not None:
+        last_q = st.session_state.last_question
+        # 해설이 있으면 표시
+        if "해설" in last_q and pd.notna(last_q["해설"]):
+            st.info(f"📘 해설: {last_q['해설']}")
+
+        # 평점 버튼
+        rating_col1, rating_col2, rating_col3 = st.columns(3)
+
+        # '다시 보지 않기' 처리
+        if rating_col1.button("❌ 다시 보지 않기"):
+            update_question_rating(user_progress_file, st.session_state.last_qnum, "skip")
+            log_to_sheet({
+                "timestamp": datetime.now().isoformat(),
+                "user_name": st.session_state.user_name,
+                "question_id": st.session_state.last_qnum,
+                "correct": st.session_state.last_correct,
+                "rating": "skip",
+            })
+            # 현재 문제를 제거
+            st.session_state.df = st.session_state.df[
+                st.session_state.df["문제번호"] != question["문제번호"]
+            ]
+            get_new_question()
+            st.session_state.answered = False
+            st.rerun()
+
+        # '이해 50~90%' 처리
+        if rating_col2.button("📘 이해 50~90%"):
+            update_question_rating(user_progress_file, st.session_state.last_qnum, "mid")
+            log_to_sheet({
+                "timestamp": datetime.now().isoformat(),
+                "user_name": st.session_state.user_name,
+                "question_id": st.session_state.last_qnum,
+                "correct": st.session_state.last_correct,
+                "rating": "mid",
+            })
+            get_new_question()
+            st.session_state.answered = False
+            st.rerun()
+
+        # '이해 50% 미만' 처리
+        if rating_col3.button("🔄 이해 50% 미만"):
+            update_question_rating(user_progress_file, st.session_state.last_qnum, "low")
+            log_to_sheet({
+                "timestamp": datetime.now().isoformat(),
+                "user_name": st.session_state.user_name,
+                "question_id": st.session_state.last_qnum,
+                "correct": st.session_state.last_correct,
+                "rating": "low",
+            })
+            get_new_question()
+            st.session_state.answered = False
+            st.rerun()
+
+    # 10. 사이드바 요약 및 기타 기능 표시
+    st.sidebar.markdown("———")
+    st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
+    st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
+    st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
+    st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
+    remaining_count = st.session_state.df.shape[0] if st.session_state.df is not None else 0
+    st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
+
+    # 11. 사이드바 버튼 처리
+    if st.sidebar.button("📂 오답 엑셀로 저장"):
+        save_wrong_answers_to_excel()
+    if st.sidebar.button("📈 주간 랭킹 보기"):
+        show_weekly_ranking()
+    if st.sidebar.button("❔ 오답 목록 보기"):
+        show_wrong_list_table()
+
+
+
+# 버튼 처리는 새로운 `main_page()`에서 수행됩니다.
 
 
 def run_app() -> None:
@@ -616,6 +819,7 @@ def run_app() -> None:
     if not st.session_state.logged_in:
         login_page()
         return
+    # call the new main page implementation
     main_page()
 
 # Streamlit 앱을 실행할 때는 __name__ == "__main__" 조건으로 run_app 호출
