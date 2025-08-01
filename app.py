@@ -169,16 +169,21 @@ if not st.session_state.answered:
         st.session_state.repeat_question = None
     else:
         if "question" not in st.session_state or st.session_state.answered:
-            st.session_state.question = df.sample(1).iloc[0]
+            question = df.sample(1).iloc[0]
+            st.session_state.question = question
+        else:
+            question = st.session_state.question
 
-        question = st.session_state.question
+    if question is None or not isinstance(question, pd.Series):
+        st.error("문제를 불러오지 못했습니다. CSV 형식이 올바른지 확인하세요.")
+        st.stop()
 
-    st.session_state.last_qnum = question['문제번호']
-    st.write(f"### 문제 {question['문제번호']}: {question['문제']}")
+    st.session_state.last_qnum = question.get('문제번호', '알수없음')
+    st.write(f"### 문제 {question.get('문제번호', '?')}: {question.get('문제', '질문 없음')}")
     user_choice = st.radio("정답을 선택하세요", ["O", "X"])
 
     if st.button("제출"):
-        correct = (user_choice == question['정답'])
+        correct = (user_choice == question.get('정답', ''))
         st.session_state.answered = True
         st.session_state.last_correct = correct
         st.session_state.score += int(correct)
@@ -190,36 +195,4 @@ if not st.session_state.answered:
             wrong_entry["선택"] = user_choice
             st.session_state.wrong_list.append(wrong_entry)
 
-        st.rerun()
-
-else:
-    correct = st.session_state.last_correct
-    if correct:
-        st.success("정답입니다! 👏")
-    else:
-        st.error("오답입니다. 다시 복습하세요! ❌")
-        st.markdown(f"**해설:** {st.session_state.question.get('해설', '없음')}")
-
-    st.write("#### 📊 해당 문제에 대한 이해도는 어느 정도였나요?")
-    col1, col2, col3 = st.columns(3)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    qid = st.session_state.last_qnum
-    user = st.session_state.user_name
-
-    if col1.button("❌ 다시 보지 않기"):
-        log_to_sheet(now, user, qid, correct, "다시보지않기")
-        st.session_state.answered = False
-        st.session_state.repeat_question = None
-        st.rerun()
-
-    if col2.button("🤔 50~90% 이해"):
-        log_to_sheet(now, user, qid, correct, "중간이해")
-        st.session_state.answered = False
-        st.session_state.repeat_question = None
-        st.rerun()
-
-    if col3.button("❗ 50% 미만 이해"):
-        log_to_sheet(now, user, qid, correct, "미흡")
-        st.session_state.answered = False
-        st.session_state.repeat_question = st.session_state.question
         st.rerun()
