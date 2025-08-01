@@ -11,7 +11,6 @@ import streamlit as st
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# 디렉터리 초기화
 USER_DATA_DIR = "user_data"
 os.makedirs(USER_DATA_DIR, exist_ok=True)
 
@@ -21,7 +20,7 @@ def get_safe_filename(name: str) -> str:
 def validate_session_keys(keys):
     for key in keys:
         if key not in st.session_state:
-            if key in ("wrong_list",):
+            if key == "wrong_list":
                 st.session_state[key] = []
             elif key in ("score", "total"):
                 st.session_state[key] = 0
@@ -60,8 +59,7 @@ def connect_to_sheet():
     creds_dict = json.loads(st.secrets["GCP_CREDENTIALS"])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
-    sheet = client.open("oxquiz_progress_log").worksheet("시트1")
-    return sheet
+    return client.open("oxquiz_progress_log").worksheet("시트1")
 
 def log_to_sheet(data: dict):
     try:
@@ -84,27 +82,17 @@ def display_weekly_ranking():
         return
     try:
         df = pd.read_csv(file_path)
-    except Exception as e:
-        st.warning(f"주간 랭킹 파일을 읽는 중 오류가 발생했습니다: {e}")
-        return
-
-    if "timestamp" not in df.columns or "user_name" not in df.columns:
-        st.warning("주간 랭킹 파일의 형식이 올바르지 않습니다.")
-        return
-
-    try:
         df["timestamp"] = pd.to_datetime(df["timestamp"])
     except Exception as e:
-        st.warning(f"날짜 형식을 변환하는 중 오류가 발생했습니다: {e}")
+        st.warning(f"오류 발생: {e}")
         return
 
     now = datetime.now()
-    start_of_week = now - timedelta(days=now.weekday())
-    end_of_week = start_of_week + timedelta(days=7)
+    start, end = now - timedelta(days=now.weekday()), now + timedelta(days=1)
+    df_week = df[(df["timestamp"] >= start) & (df["timestamp"] < end)]
 
-    df_week = df[(df["timestamp"] >= start_of_week) & (df["timestamp"] < end_of_week)]
     if df_week.empty:
-        st.info("이번 주에는 아직 풀이 기록이 없습니다.")
+        st.info("이번 주에는 풀이 기록이 없습니다.")
         return
 
     ranking_df = (
@@ -112,21 +100,16 @@ def display_weekly_ranking():
         .sort_values(by="풀이수", ascending=False)
     )
     ranking_df["순위"] = range(1, len(ranking_df) + 1)
-    ranking_df = ranking_df[["순위", "user_name", "풀이수"]]
-
     st.subheader("📈 이번 주 문제풀이 랭킹")
-    st.table(ranking_df)
+    st.table(ranking_df[["순위", "user_name", "풀이수"]])
 
-    if st.session_state.user_name in ranking_df["user_name"].values:
-        row = ranking_df[
-            ranking_df["user_name"] == st.session_state.user_name
-        ].iloc[0]
-        st.success(
-            f"{st.session_state.user_name}님의 이번 주 풀이 수: {int(row['풀이수'])}개, 순위: {int(row['순위'])}위"
-        )
+    user = st.session_state.user_name
+    if user in ranking_df["user_name"].values:
+        row = ranking_df[ranking_df["user_name"] == user].iloc[0]
+        st.success(f"{user}님의 이번 주 풀이 수: {row['풀이수']}개, 순위: {row['순위']}위")
 
-def handle_rating(rating: str, user_progress_file: str, question: dict) -> None:
-    update_question_rating(user_progress_file, st.session_state.last_qnum, rating)
+def handle_rating(rating: str, file: str, q: dict):
+    update_question_rating(file, st.session_state.last_qnum, rating)
     log_to_sheet({
         "timestamp": datetime.now().isoformat(),
         "user_name": st.session_state.user_name,
@@ -135,64 +118,110 @@ def handle_rating(rating: str, user_progress_file: str, question: dict) -> None:
         "rating": rating,
     })
     st.session_state.df = st.session_state.df[
-        st.session_state.df["문제번호"] != question["문제번호"]
+        st.session_state.df["문제번호"] != q["문제번호"]
     ]
     get_new_question()
     st.session_state.answered = False
     st.rerun()
 
-# 해설 및 평점 버튼 처리
-if st.session_state.get("answered") and st.session_state.get("last_question"):
-    last_q = st.session_state.last_question
-    if "해설" in last_q and pd.notna(last_q["해설"]):
-        st.info(f"📘 해설: {last_q['해설']}")
+def main_page():
+    question = st.session_state.get("question")
+    if question is None:
+        get_new_question()
+        question = st.session_state.get("question")
 
+    if question is None:
+        st.info("문제가 없습니다. 문제 파일을 확인해주세요.")
+        return
+
+    st.markdown(f"📚 단원명: {question.get('단원명','')} | 문제번호: {question.get('문제번호')}")
+    st.markdown(f"❓ {question['문제']}")
+
+    user_answer = None
     col1, col2, col3 = st.columns(3)
-    if col1.button("❌ 다시 보지 않기"):
-        handle_rating("skip", st.session_state.get("user_progress_file", "progress.csv"), last_q)
-    if col2.button("📘 이해 50~90%"):
-        handle_rating("mid", st.session_state.get("user_progress_file", "progress.csv"), last_q)
-    if col3.button("🔄 이해 50% 미만"):
-        handle_rating("low", st.session_state.get("user_progress_file", "progress.csv"), last_q)
+    if col1.button("⭕ O"):
+        user_answer = "O"
+    elif col2.button("❌ X"):
+        user_answer = "X"
+    elif col3.button("⁉️ 모름"):
+        user_answer = "모름"
 
-# 사이드바 요약 표시
-validate_session_keys(["user_name", "score", "total", "wrong_list", "df"])
-accuracy = (st.session_state.score / st.session_state.total * 100) if st.session_state.total > 0 else 0
-remaining = st.session_state.df.shape[0] if st.session_state.df is not None else 0
+    if user_answer:
+        st.session_state.total += 1
+        correct = user_answer == question["정답"]
+        st.session_state.last_question = question.copy()
+        st.session_state.last_qnum = str(question.get("문제번호"))
+        st.session_state.last_correct = correct
+        st.session_state.answered = True
 
-st.sidebar.markdown("———")
-st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
-st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
-st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
-st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
-st.sidebar.markdown(f"📈 정답률: {accuracy:.1f}%")
-st.sidebar.markdown(f"📘 남은 문제: {remaining}")
-st.sidebar.markdown("Made with ❤️ for 흥민's 공부")
+        if correct:
+            st.session_state.score += 1
+            st.success("✅ 정답입니다!")
+        else:
+            st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
+            st.session_state.wrong_list.append({
+                "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "문제번호": question.get("문제번호"),
+                "단원명": question.get("단원명", ""),
+                "문제": question["문제"],
+                "정답": question["정답"],
+                "선택": user_answer,
+                "해설": question.get("해설", "")
+            })
 
-# 오답 저장 버튼
-if st.sidebar.button("📂 오답 엑셀로 저장"):
-    if st.session_state.wrong_list:
-        wrong_df = pd.DataFrame(st.session_state.wrong_list)
-        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_name = get_safe_filename(st.session_state.user_name)
-        filename = f"{safe_name}_wrong_{timestamp_str}.xlsx"
-        display_name = f"{st.session_state.user_name}_오답_{timestamp_str}.xlsx"
-        try:
-            wrong_df.to_excel(filename, index=False)
-            st.sidebar.success(f"📁 {display_name} 파일로 저장 완료!")
-        except Exception as e:
-            st.sidebar.error(f"❗엑셀 파일을 저장하는 중 오류 발생: {e}")
-    else:
-        st.sidebar.warning("❗ 오답이 없습니다.")
+def run_app():
+    validate_session_keys(["user_name", "score", "total", "wrong_list", "df"])
+    accuracy = (st.session_state.score / st.session_state.total * 100) if st.session_state.total else 0
+    remaining = st.session_state.df.shape[0] if st.session_state.df is not None else 0
 
-# 주간 랭킹 / 오답 리스트 버튼
-if st.sidebar.button("📈 주간 랭킹 보기"):
-    display_weekly_ranking()
+    main_page()
 
-if st.sidebar.button("❔ 오답 목록 보기"):
-    if st.session_state.wrong_list:
-        wrong_df = pd.DataFrame(st.session_state.wrong_list)
-        st.subheader("❗ 오답 목록")
-        st.table(wrong_df[["날짜", "문제번호", "단원명", "문제", "선택", "정답", "해설"]])
-    else:
-        st.info("현재 오답이 없습니다.")
+    if st.session_state.get("answered") and st.session_state.get("last_question"):
+        q = st.session_state.last_question
+        if "해설" in q and pd.notna(q["해설"]):
+            st.info(f"📘 해설: {q['해설']}")
+
+        c1, c2, c3 = st.columns(3)
+        if c1.button("❌ 다시 보지 않기"):
+            handle_rating("skip", st.session_state.get("user_progress_file", "progress.csv"), q)
+        if c2.button("📘 이해 50~90%"):
+            handle_rating("mid", st.session_state.get("user_progress_file", "progress.csv"), q)
+        if c3.button("🔄 이해 50% 미만"):
+            handle_rating("low", st.session_state.get("user_progress_file", "progress.csv"), q)
+
+    st.sidebar.markdown("———")
+    st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
+    st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
+    st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
+    st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
+    st.sidebar.markdown(f"📈 정답률: {accuracy:.1f}%")
+    st.sidebar.markdown(f"📘 남은 문제: {remaining}")
+    st.sidebar.markdown("Made with ❤️ for 흥민's 공부")
+
+    if st.sidebar.button("📂 오답 엑셀로 저장"):
+        if st.session_state.wrong_list:
+            wrong_df = pd.DataFrame(st.session_state.wrong_list)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name = get_safe_filename(st.session_state.user_name)
+            filename = f"{safe_name}_wrong_{ts}.xlsx"
+            try:
+                wrong_df.to_excel(filename, index=False)
+                st.sidebar.success(f"📁 {filename} 저장 완료!")
+            except Exception as e:
+                st.sidebar.error(f"❗저장 중 오류 발생: {e}")
+        else:
+            st.sidebar.warning("❗ 오답이 없습니다.")
+
+    if st.sidebar.button("📈 주간 랭킹 보기"):
+        display_weekly_ranking()
+
+    if st.sidebar.button("❔ 오답 목록 보기"):
+        if st.session_state.wrong_list:
+            df = pd.DataFrame(st.session_state.wrong_list)
+            st.subheader("❗ 오답 목록")
+            st.table(df[["날짜", "문제번호", "단원명", "문제", "선택", "정답", "해설"]])
+        else:
+            st.info("현재 오답이 없습니다.")
+
+if __name__ == "__main__":
+    run_app()
