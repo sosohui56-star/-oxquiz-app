@@ -588,7 +588,7 @@ if st.sidebar.button("❔ 오답 목록 보기"):
 
         # 주간 랭킹 보기 버튼
 if st.sidebar.button("📈 주간 랭킹 보기"):
-display_weekly_ranking()
+    display_weekly_ranking()
 # 오답 목록 보기 버튼
 if st.sidebar.button("❔ 오답 목록 보기"):
 if st.session_state.wrong_list:
