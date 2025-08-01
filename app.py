@@ -65,7 +65,6 @@ def connect_to_sheet():
 def log_to_sheet(data: dict):
     try:
         sheet = connect_to_sheet()
-        # None 값 빈 문자열 처리
         row = [
             str(data.get("timestamp") or ""),
             str(data.get("user_name") or ""),
@@ -73,12 +72,14 @@ def log_to_sheet(data: dict):
             str(data.get("correct") or ""),
             str(data.get("rating") or ""),
         ]
+        st.warning(f"row 내용: {row}")  # 🚨🚨🚨 여기에 row 출력!
         sheet.append_row(row)
         st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
         st.info("✅ 구글 시트에 기록 성공!")
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
         st.error(f"📛 구글 시트 기록 실패: {e}")
+
 
 
 def load_user_progress(username: str):
