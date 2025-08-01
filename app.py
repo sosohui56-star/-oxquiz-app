@@ -404,9 +404,10 @@ if "문제" not in df_loaded_temp.columns or "정답" not in df_loaded_temp.colu
         get_new_question()
 
     # 문제가 없으면 종료
-    if st.session_state.question is None:
-        st.info("선택한 단원에 문제 데이터가 없거나, 이전에 모두 풀었습니다.")
-        return
+   if st.session_state.question is None:
+    st.info("선택한 단원에 문제 데이터가 없거나, 이전에 모두 풀었습니다.")
+    st.stop()
+
 
     # 문제 표시
     question = st.session_state.question
