@@ -378,10 +378,10 @@ try:
 except Exception as e:
     ...
 
-  # 필수 컬럼 확인
-    if "문제" not in df_loaded_temp.columns or "정답" not in df_loaded_temp.columns:
-        st.error("CSV 파일에 '문제' 또는 '정답' 열이 없습니다.")
-        return
+ # 필수 컬럼 확인
+if "문제" not in df_loaded_temp.columns or "정답" not in df_loaded_temp.columns:
+    st.error("CSV 파일에 '문제' 또는 '정답' 열이 없습니다.")
+    st.stop()  # ✅ 함수 밖에서는 return 대신 st.stop() 사용!
 
     df_loaded_temp = df_loaded_temp.dropna(subset=["문제", "정답"])
     chapters = sorted(df_loaded_temp["단원명"].dropna().unique()) if "단원명" in df_loaded_temp.columns else []
