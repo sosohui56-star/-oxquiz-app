@@ -7,7 +7,8 @@ import pandas as pd
 import streamlit as st
 import gspread
 import json
-from oauth2client.service_account import ServiceAccountCredentials
+from oauth2client.service_account import ServiceAccountCredentials  # Deprecated; kept for backwards compatibility
+from google.oauth2.service_account import Credentials
 
 USER_DATA_DIR = "user_data"
 os.makedirs(USER_DATA_DIR, exist_ok=True)
@@ -50,15 +51,58 @@ def record_user_activity() -> None:
     except Exception as e:
         st.warning(f"기록 파일에 저장하는 중 오류가 발생했습니다: {e}")
 
-def connect_to_sheet():
+def connect_to_sheet() -> gspread.Worksheet:
+    """
+    Connect to the Google Sheets worksheet using service account credentials stored
+    in Streamlit secrets. This function attempts to use the modern google-auth
+    based credentials first via gspread's helper. If that is unavailable (e.g.,
+    for older gspread versions) it falls back to the deprecated oauth2client
+    credentials.
+
+    Returns:
+        gspread.Worksheet: The worksheet object for "시트1" in the
+            "oxquiz_progress_log" spreadsheet.
+    """
+    # Define the scopes required for reading and writing to Sheets and Drive
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds_dict = dict(st.secrets["GCP_CREDENTIALS"])
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
+
+    # Load the service account credentials from Streamlit secrets. Depending on
+    # how the secret is stored (as a JSON string or already a mapping), parse
+    # accordingly. The st.secrets object behaves like a ConfigParser mapping.
+    creds_data = st.secrets.get("GCP_CREDENTIALS", {})
+    if isinstance(creds_data, str):
+        # st.secrets may return the JSON as a single string; parse it
+        try:
+            creds_dict = json.loads(creds_data)
+        except json.JSONDecodeError:
+            # If parsing fails, fall back to empty dict to trigger error later
+            creds_dict = {}
+    else:
+        # Convert any mapping-like object into a plain dict
+        creds_dict = dict(creds_data)
+
+    # First try to create a client using the modern gspread helper which
+    # internally uses google-auth. This avoids pyasn1-related errors such as
+    # "Short substrate on input".
+    try:
+        client = gspread.service_account_from_dict(creds_dict, scopes=scope)
+    except AttributeError:
+        # If service_account_from_dict is not available, fall back to oauth2client
+        try:
+            # Create google-auth credentials explicitly and authorize via gspread
+            credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
+            client = gspread.authorize(credentials)
+        except Exception:
+            # As a last resort, use the deprecated oauth2client credentials. This
+            # branch exists for legacy environments but may produce ASN.1 errors.
+            creds_legacy = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+            client = gspread.authorize(creds_legacy)
+
+    # Open the target spreadsheet and worksheet
     sheet = client.open("oxquiz_progress_log").worksheet("시트1")
     return sheet
 
@@ -428,10 +472,8 @@ def main_page() -> None:
         st.session_state.last_correct = correct
         st.session_state.last_qnum = str(qnum_display)
 
-    # If the user has answered the previous question, show the explanation and rating buttons
     if st.session_state.answered and st.session_state.last_question is not None:
         last_q = st.session_state.last_question
-        # Display an explanation if available
         if "해설" in last_q and pd.notna(last_q["해설"]):
             st.info(f"📘 해설: {last_q['해설']}")
         rating_col1, rating_col2, rating_col3 = st.columns(3)
@@ -447,7 +489,6 @@ def main_page() -> None:
                 "correct": st.session_state.last_correct,
                 "rating": "skip",
             })
-            # Remove the question from the current data frame so it won't be asked again
             st.session_state.df = st.session_state.df[
                 st.session_state.df["문제번호"] != question["문제번호"]
             ]
