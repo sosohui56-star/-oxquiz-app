@@ -525,7 +525,9 @@ st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
 st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
 st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
 st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
-st.sidebar.markdown(f"📈 정답률: {(st.session_state.score / st.session_state.total * 100) if st.session_state.total > 0 else 0:.1f}%")
+st.sidebar.markdown(
+    f"📈 정답률: {(st.session_state.score / st.session_state.total * 100) if st.session_state.total > 0 else 0:.1f}%"
+)
 st.sidebar.markdown(f"📘 남은 문제: {st.session_state.df.shape[0] if st.session_state.df is not None else 0}")
 st.sidebar.markdown("Made c")
 
@@ -542,10 +544,8 @@ if st.sidebar.button("📂 오답 엑셀로 저장"):
             st.sidebar.success(f"📁 {display_name} 파일로 저장 완료!")
         except Exception as e:
             st.sidebar.error(f"❗엑셀 파일을 저장하는 중 오류 발생: {e}")
-
-            else:
-                st.sidebar.warning("❗ 오답이 없습니다.")
-
+    else:
+        st.sidebar.warning("❗ 오답이 없습니다.")
         # 주간 랭킹 보기 버튼
         if st.sidebar.button("📈 주간 랭킹 보기"):
             display_weekly_ranking()
