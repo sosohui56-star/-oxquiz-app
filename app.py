@@ -5,7 +5,6 @@ import re
 
 import pandas as pd
 import streamlit as st
-import gspread
 import json
 from google.oauth2.service_account import Credentials
 
@@ -31,6 +30,7 @@ def init_session_state() -> None:
         "is_admin": False,
         "last_correct": None,
         "last_qnum": None,
+        "sheet_log_status": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -52,34 +52,24 @@ def record_user_activity() -> None:
 
 def connect_to_sheet() -> 'gspread.Worksheet':
     import gspread
-    from google.oauth2.service_account import Credentials
-    import json
-    import streamlit as st
-
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
 
-    # Streamlit 시크릿에서 GCP 서비스 계정 정보 가져오기
     creds_data = st.secrets.get("GCP_CREDENTIALS", {})
 
-    # creds_data가 문자열인 경우 JSON으로 파싱, 그렇지 않으면 dict 변환
     creds_dict = json.loads(creds_data) if isinstance(creds_data, str) else dict(creds_data)
 
-    # 구글 인증서 객체 생성
     credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
 
-    # gspread 클라이언트 생성 및 구글 시트 열기
     client = gspread.authorize(credentials)
     sheet = client.open("oxquiz_progress_log").worksheet("시트1")
 
     return sheet
 
-
 def log_to_sheet(data: dict):
-    # 진입 로그
     st.warning("🟡 log_to_sheet 진입")
     row = [
         str(data.get("timestamp") or ""),
@@ -88,7 +78,7 @@ def log_to_sheet(data: dict):
         str(data.get("correct") or ""),
         str(data.get("rating") or ""),
     ]
-    st.warning(f"row 내용: {row}")  # 🚨 row 값 출력!
+    st.warning(f"row 내용: {row}")
 
     try:
         sheet = connect_to_sheet()
@@ -98,9 +88,6 @@ def log_to_sheet(data: dict):
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
         st.error(f"📛 구글 시트 기록 실패: {e}")
-
-
-
 
 def load_user_progress(username: str):
     safe_name = get_safe_filename(username)
@@ -116,27 +103,50 @@ def load_user_progress(username: str):
 
         if "rating" not in df.columns:
             df["rating"] = ""
-        st.session_state.total = len(df)
-        st.session_state.score = df[df["correct"] == True].shape[0]
-
-        wrong_df = df[(df["correct"] == False)]
-        st.session_state.wrong_list = []
-        for _, row in wrong_df.iterrows():
-            st.session_state.wrong_list.append({
-                "이름": username,
-                "날짜": row.get("timestamp", ""),
-                "문제번호": row.get("question_id", ""),
-                "단원명": row.get("chapter", ""),
-                "문제": row.get("question", ""),
-                "정답": row.get("correct_answer", ""),
-                "선택": row.get("answer", ""),
-                "해설": row.get("explanation", ""),
-            })
+        # 여기서는 진행 관련 값 세션에 직접 저장하지 말고 호출하는 쪽에서 처리하도록 함
 
         skip_ids = set(df[df["rating"] == "skip"]["question_id"].astype(str))
         low_ids = set(df[df["rating"] == "low"]["question_id"].astype(str))
 
-    return skip_ids, low_ids, file_path
+        return skip_ids, low_ids, file_path, df
+    else:
+        return skip_ids, low_ids, file_path, None
+
+def update_session_progress(username: str) -> None:
+    safe_name = get_safe_filename(username)
+    file_path = os.path.join(USER_DATA_DIR, f"{safe_name}_progress.csv")
+
+    if not os.path.exists(file_path):
+        st.session_state.score = 0
+        st.session_state.total = 0
+        st.session_state.wrong_list = []
+        return
+
+    try:
+        df = pd.read_csv(file_path)
+    except Exception as e:
+        st.warning(f"사용자 진행 파일 읽기 오류: {e}")
+        st.session_state.score = 0
+        st.session_state.total = 0
+        st.session_state.wrong_list = []
+        return
+
+    st.session_state.total = len(df)
+    st.session_state.score = df[df["correct"] == True].shape[0]
+
+    wrong_df = df[df["correct"] == False]
+    st.session_state.wrong_list = []
+    for _, row in wrong_df.iterrows():
+        st.session_state.wrong_list.append({
+            "이름": username,
+            "날짜": row.get("timestamp", ""),
+            "문제번호": row.get("question_id", ""),
+            "단원명": row.get("chapter", ""),
+            "문제": row.get("question", ""),
+            "정답": row.get("correct_answer", ""),
+            "선택": row.get("answer", ""),
+            "해설": row.get("explanation", ""),
+        })
 
 def save_user_progress(file_path: str, data: dict) -> None:
     df_line = pd.DataFrame([data])
@@ -224,16 +234,24 @@ def login_page() -> None:
             st.session_state.is_admin = True
             st.session_state.logged_in = True
             st.session_state.user_name = f"{name} ({group})" if group else name
-            load_user_progress(st.session_state.user_name)
+            
+            # 로그인 시 진행 기록 복원
+            _, _, _, _ = load_user_progress(st.session_state.user_name)  # id 추출용 (필요시 사용)
+            update_session_progress(st.session_state.user_name)
+
             st.success(f"🎉 관리자님 환영합니다, {st.session_state.user_name}!")
-            st.rerun()
+            st.experimental_rerun()
+
         elif password == "1234":
             st.session_state.is_admin = False
             st.session_state.logged_in = True
             st.session_state.user_name = f"{name} ({group})" if group else name
-            load_user_progress(st.session_state.user_name)
+
+            _, _, _, _ = load_user_progress(st.session_state.user_name)
+            update_session_progress(st.session_state.user_name)
+
             st.success(f"🎉 환영합니다, {st.session_state.user_name}님!")
-            st.rerun()
+            st.experimental_rerun()
         else:
             st.error("❌ 암호가 틀렸습니다.")
 
@@ -323,11 +341,10 @@ def main_page() -> None:
     st.title("📘 공인중개사 OX 퀴즈")
     st.sidebar.header("📂 문제집 선택")
 
-    if "sheet_log_status" in st.session_state:
+    if st.session_state.sheet_log_status:
         st.info(st.session_state.sheet_log_status)
-        del st.session_state.sheet_log_status
+        st.session_state.sheet_log_status = None
 
-def main_page():
     uploaded_file = st.sidebar.file_uploader("문제집 업로드(CSV)", type=["csv"])
     csv_files = [
         f for f in os.listdir()
@@ -348,7 +365,8 @@ def main_page():
         st.warning("⚠️ CSV 문제 파일을 업로드하거나 선택하세요.")
         return
 
-    skip_ids, low_ids, user_progress_file = load_user_progress(st.session_state.user_name)
+    # 로그인 시 복원된 세션 정보를 기반으로 skip_ids, low_ids 받아오기
+    skip_ids, low_ids, user_progress_file, _ = load_user_progress(st.session_state.user_name)
 
     df_source = None
     file_label = None
@@ -387,6 +405,7 @@ def main_page():
         "특정 단원만 푸시겠습니까?", ["전체 보기"] + chapters
     )
 
+    # 현재 문제집 / 단원이 변경되었거나, df가 없으면 문제 필터 및 로드
     if (
         st.session_state.prev_selected_chapter != selected_chapter
         or st.session_state.prev_selected_file != file_label
@@ -396,6 +415,7 @@ def main_page():
         st.session_state.prev_selected_file = file_label
         load_and_filter_data(df_source, selected_chapter, skip_ids, low_ids)
 
+    # 문제 선택
     if st.session_state.question is None:
         get_new_question()
 
@@ -446,19 +466,33 @@ def main_page():
             })
             st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
 
+        # 사용자 진행상황 로컬 저장 (파일)
+        data_to_save = {
+            "timestamp": datetime.now().isoformat(),
+            "user_name": st.session_state.user_name,
+            "question_id": str(qnum_display),
+            "correct": correct,
+            "rating": "",  # 평점은 사용자가 버튼 누를 때 업데이트
+            "chapter": question.get("단원명", ""),
+            "question": question["문제"],
+            "correct_answer": question["정답"],
+            "answer": user_answer,
+            "explanation": question["해설"] if "해설" in question and pd.notna(question["해설"]) else "",
+        }
+        save_user_progress(user_progress_file, data_to_save)
+
         st.session_state.last_correct = correct
         st.session_state.last_qnum = str(qnum_display)
 
+    # 문제 이해도 평점 버튼 처리
     if st.session_state.answered and st.session_state.last_question is not None:
         last_q = st.session_state.last_question
         if "해설" in last_q and pd.notna(last_q["해설"]):
             st.info(f"📘 해설: {last_q['해설']}")
         rating_col1, rating_col2, rating_col3 = st.columns(3)
 
-        # --- 평점 버튼 ---
         if rating_col1.button("❌ 다시 보지 않기"):
             update_question_rating(user_progress_file, st.session_state.last_qnum, "skip")
-            st.warning("log_to_sheet 실행직전!")   # ⬅️ 추가
             log_to_sheet({
                 "timestamp": datetime.now().isoformat(),
                 "user_name": st.session_state.user_name,
@@ -467,15 +501,14 @@ def main_page():
                 "rating": "skip",
             })
             st.session_state.df = st.session_state.df[
-                st.session_state.df["문제번호"] != question["문제번호"]
+                st.session_state.df["문제번호"] != st.session_state.last_qnum
             ]
             get_new_question()
             st.session_state.answered = False
-            st.rerun()
+            st.experimental_rerun()
 
         if rating_col2.button("📘 이해 50~90%"):
             update_question_rating(user_progress_file, st.session_state.last_qnum, "mid")
-            st.warning("log_to_sheet 실행직전!")   # ⬅️ 추가
             log_to_sheet({
                 "timestamp": datetime.now().isoformat(),
                 "user_name": st.session_state.user_name,
@@ -485,11 +518,10 @@ def main_page():
             })
             get_new_question()
             st.session_state.answered = False
-            st.rerun()
+            st.experimental_rerun()
 
         if rating_col3.button("🔄 이해 50% 미만"):
             update_question_rating(user_progress_file, st.session_state.last_qnum, "low")
-            st.warning("log_to_sheet 실행직전!")   # ⬅️ 추가
             log_to_sheet({
                 "timestamp": datetime.now().isoformat(),
                 "user_name": st.session_state.user_name,
@@ -499,10 +531,7 @@ def main_page():
             })
             get_new_question()
             st.session_state.answered = False
-            st.rerun()
-
-
-
+            st.experimental_rerun()
 
     st.sidebar.markdown("———")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
