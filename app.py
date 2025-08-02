@@ -140,6 +140,13 @@ def update_session_progress_from_df(username: str, df):
             "해설": row.get("explanation", ""),
         })
 
+    # 상태 디버깅용 출력 (필요 시 활성화)
+    # st.write("로그인 후 복원된 상태:", {
+    #     "score": st.session_state.score,
+    #     "total": st.session_state.total,
+    #     "wrong_list_len": len(st.session_state.wrong_list),
+    # })
+
 
 def save_user_progress(file_path: str, data: dict) -> None:
     df_line = pd.DataFrame([data])
@@ -156,10 +163,9 @@ def update_question_rating(file_path: str, question_id: str, rating: str) -> Non
             df = pd.read_csv(file_path)
             if "rating" not in df.columns:
                 df["rating"] = ""
-            mask = (
-                (df["question_id"].astype(str) == question_id) &
-                (df["rating"].isna() | (df["rating"] == ""))
-            )
+            df["question_id"] = df["question_id"].astype(str)
+            df["rating"] = df["rating"].astype(str)
+            mask = (df["question_id"] == question_id) & (df["rating"] == "")
             if mask.any():
                 df.loc[mask, "rating"] = rating
                 df.to_csv(file_path, index=False)
@@ -235,7 +241,7 @@ def login_page() -> None:
             update_session_progress_from_df(st.session_state.user_name, df)
 
             st.success(f"🎉 관리자님 환영합니다, {st.session_state.user_name}!")
-            st.experimental_rerun()
+            st.rerun()
 
         elif password == "1234":
             st.session_state.is_admin = False
@@ -246,7 +252,7 @@ def login_page() -> None:
             update_session_progress_from_df(st.session_state.user_name, df)
 
             st.success(f"🎉 환영합니다, {st.session_state.user_name}님!")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("❌ 암호가 틀렸습니다.")
 
@@ -496,7 +502,7 @@ def main_page() -> None:
             ]
             get_new_question()
             st.session_state.answered = False
-            st.experimental_rerun()
+            st.rerun()
 
         if rating_col2.button("📘 이해 50~90%"):
             update_question_rating(user_progress_file, st.session_state.last_qnum, "mid")
@@ -509,7 +515,7 @@ def main_page() -> None:
             })
             get_new_question()
             st.session_state.answered = False
-            st.experimental_rerun()
+            st.rerun()
 
         if rating_col3.button("🔄 이해 50% 미만"):
             update_question_rating(user_progress_file, st.session_state.last_qnum, "low")
@@ -522,7 +528,7 @@ def main_page() -> None:
             })
             get_new_question()
             st.session_state.answered = False
-            st.experimental_rerun()
+            st.rerun()
 
     st.sidebar.markdown("———")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
