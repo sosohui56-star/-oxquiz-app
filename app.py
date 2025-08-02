@@ -327,18 +327,19 @@ def main_page() -> None:
         st.info(st.session_state.sheet_log_status)
         del st.session_state.sheet_log_status
 
+def main_page():
     uploaded_file = st.sidebar.file_uploader("문제집 업로드(CSV)", type=["csv"])
-csv_files = [
-    f for f in os.listdir()
-    if f.endswith(".csv") and f not in ["progress_log.csv"]
-]
-selected_file = st.sidebar.selectbox("로컬 CSV 선택", csv_files)
-
+    csv_files = [
+        f for f in os.listdir()
+        if f.endswith(".csv") and f not in ["progress_log.csv"]
+    ]
+    selected_file = st.sidebar.selectbox("로컬 CSV 선택", csv_files)
 
     if st.session_state.total > 0:
         accuracy = (st.session_state.score / st.session_state.total) * 100
     else:
         accuracy = 0.0
+
     st.sidebar.markdown(f"🎯 정답률: {accuracy:.1f}%")
     remaining_local = st.session_state.df.shape[0] if st.session_state.df is not None else 0
     st.sidebar.markdown(f"📝 남은 문제: {remaining_local}개")
