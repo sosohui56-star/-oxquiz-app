@@ -7,7 +7,6 @@ import pandas as pd
 import streamlit as st
 import gspread
 import json
-from oauth2client.service_account import ServiceAccountCredentials  # Deprecated; kept for backwards compatibility
 from google.oauth2.service_account import Credentials
 
 USER_DATA_DIR = "user_data"
@@ -51,60 +50,33 @@ def record_user_activity() -> None:
     except Exception as e:
         st.warning(f"기록 파일에 저장하는 중 오류가 발생했습니다: {e}")
 
-def connect_to_sheet() -> gspread.Worksheet:
-    """
-    Connect to the Google Sheets worksheet using service account credentials stored
-    in Streamlit secrets. This function attempts to use the modern google-auth
-    based credentials first via gspread's helper. If that is unavailable (e.g.,
-    for older gspread versions) it falls back to the deprecated oauth2client
-    credentials.
+def connect_to_sheet() -> 'gspread.Worksheet':
+    import gspread
+    from google.oauth2.service_account import Credentials
+    import json
+    import streamlit as st
 
-    Returns:
-        gspread.Worksheet: The worksheet object for "시트1" in the
-            "oxquiz_progress_log" spreadsheet.
-    """
-    # Define the scopes required for reading and writing to Sheets and Drive
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
 
-    # Load the service account credentials from Streamlit secrets. Depending on
-    # how the secret is stored (as a JSON string or already a mapping), parse
-    # accordingly. The st.secrets object behaves like a ConfigParser mapping.
+    # Streamlit 시크릿에서 GCP 서비스 계정 정보 가져오기
     creds_data = st.secrets.get("GCP_CREDENTIALS", {})
-    if isinstance(creds_data, str):
-        # st.secrets may return the JSON as a single string; parse it
-        try:
-            creds_dict = json.loads(creds_data)
-        except json.JSONDecodeError:
-            # If parsing fails, fall back to empty dict to trigger error later
-            creds_dict = {}
-    else:
-        # Convert any mapping-like object into a plain dict
-        creds_dict = dict(creds_data)
 
-    # First try to create a client using the modern gspread helper which
-    # internally uses google-auth. This avoids pyasn1-related errors such as
-    # "Short substrate on input".
-    try:
-        client = gspread.service_account_from_dict(creds_dict, scopes=scope)
-    except AttributeError:
-        # If service_account_from_dict is not available, fall back to oauth2client
-        try:
-            # Create google-auth credentials explicitly and authorize via gspread
-            credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
-            client = gspread.authorize(credentials)
-        except Exception:
-            # As a last resort, use the deprecated oauth2client credentials. This
-            # branch exists for legacy environments but may produce ASN.1 errors.
-            creds_legacy = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-            client = gspread.authorize(creds_legacy)
+    # creds_data가 문자열인 경우 JSON으로 파싱, 그렇지 않으면 dict 변환
+    creds_dict = json.loads(creds_data) if isinstance(creds_data, str) else dict(creds_data)
 
-    # Open the target spreadsheet and worksheet
+    # 구글 인증서 객체 생성
+    credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
+
+    # gspread 클라이언트 생성 및 구글 시트 열기
+    client = gspread.authorize(credentials)
     sheet = client.open("oxquiz_progress_log").worksheet("시트1")
+
     return sheet
+
 
 def log_to_sheet(data: dict):
     # 진입 로그
