@@ -8,15 +8,11 @@ import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
-
-# 전역 상수 및 폴더 생성
 USER_DATA_DIR = "user_data"
 os.makedirs(USER_DATA_DIR, exist_ok=True)
 
-
 def get_safe_filename(name: str) -> str:
     return re.sub(r"[^\w]", "_", name)
-
 
 def init_session_state() -> None:
     defaults = {
@@ -35,15 +31,15 @@ def init_session_state() -> None:
         "last_correct": None,
         "last_qnum": None,
         "sheet_log_status": None,
-        # 로그인시 복원된 문제 필터용 상태 추가
         "skip_ids": set(),
         "low_ids": set(),
         "user_progress_file": None,
+        # exam_name 필드(현재 문제집명) 추가
+        "exam_name": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
-
 
 def record_user_activity() -> None:
     file_path = "progress_log.csv"
@@ -58,7 +54,6 @@ def record_user_activity() -> None:
             writer.writerow([st.session_state.user_name, datetime.now().isoformat()])
     except Exception as e:
         st.warning(f"기록 파일에 저장하는 중 오류가 발생했습니다: {e}")
-
 
 def connect_to_sheet() -> 'gspread.Worksheet':
     import gspread
@@ -75,10 +70,9 @@ def connect_to_sheet() -> 'gspread.Worksheet':
 
     client = gspread.authorize(credentials)
     sheet = client.open("oxquiz_progress_log").worksheet("시트1")
-
     return sheet
 
-
+# exam_name(문제집 파일명)까지 6개 컬럼 기록!
 def log_to_sheet(data: dict):
     st.warning("🟡 log_to_sheet 진입")
     row = [
@@ -87,18 +81,19 @@ def log_to_sheet(data: dict):
         str(data.get("question_id") or ""),
         str(data.get("correct") or ""),
         str(data.get("rating") or ""),
+        str(data.get("exam_name") or ""),
     ]
     st.warning(f"row 내용: {row}")
 
     try:
         sheet = connect_to_sheet()
+        # 시트 첫 행에 헤더가 없다면 직접 추가 필요(현재 코드는 row append)
         sheet.append_row(row)
         st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
         st.info("✅ 구글 시트에 기록 성공!")
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
         st.error(f"📛 구글 시트 기록 실패: {e}")
-
 
 def load_user_progress(username: str):
     safe_name = get_safe_filename(username)
@@ -119,7 +114,6 @@ def load_user_progress(username: str):
 
     return skip_ids, low_ids, file_path, df
 
-
 def update_session_progress_from_df(username: str, df):
     if df is None:
         st.session_state.score = 0
@@ -129,7 +123,6 @@ def update_session_progress_from_df(username: str, df):
 
     st.session_state.total = len(df)
     st.session_state.score = df[df["correct"] == True].shape[0]
-
     wrong_df = df[df["correct"] == False]
     st.session_state.wrong_list = []
     for _, row in wrong_df.iterrows():
@@ -144,7 +137,6 @@ def update_session_progress_from_df(username: str, df):
             "해설": row.get("explanation", ""),
         })
 
-
 def save_user_progress(file_path: str, data: dict) -> None:
     df_line = pd.DataFrame([data])
     write_header = not os.path.exists(file_path)
@@ -152,7 +144,6 @@ def save_user_progress(file_path: str, data: dict) -> None:
         df_line.to_csv(file_path, mode="a", header=write_header, index=False)
     except Exception as e:
         st.warning(f"사용자 진행 파일 저장 중 오류가 발생했습니다: {e}")
-
 
 def update_question_rating(file_path: str, question_id: str, rating: str) -> None:
     try:
@@ -168,7 +159,6 @@ def update_question_rating(file_path: str, question_id: str, rating: str) -> Non
                 df.to_csv(file_path, index=False)
     except Exception as e:
         st.warning(f"문제 이해도 저장 중 오류가 발생했습니다: {e}")
-
 
 def display_weekly_ranking() -> None:
     file_path = "progress_log.csv"
@@ -218,7 +208,6 @@ def display_weekly_ranking() -> None:
             f"{st.session_state.user_name}님의 이번 주 풀이 수: {int(row['풀이수'])}개, 순위: {int(row['순위'])}위"
         )
 
-
 def login_page() -> None:
     st.title("🔐 사용자 로그인")
     name_input = st.text_input("이름을 입력하세요")
@@ -236,12 +225,10 @@ def login_page() -> None:
 
             skip_ids, low_ids, user_progress_file, df = load_user_progress(st.session_state.user_name)
             update_session_progress_from_df(st.session_state.user_name, df)
-
-            # -- 진행 필터용 상태 세션에 저장 --
             st.session_state.skip_ids = skip_ids
             st.session_state.low_ids = low_ids
             st.session_state.user_progress_file = user_progress_file
-
+            st.session_state.exam_name = None # 세션초기화
             st.success(f"🎉 관리자님 환영합니다, {st.session_state.user_name}!")
             st.rerun()
 
@@ -252,16 +239,14 @@ def login_page() -> None:
 
             skip_ids, low_ids, user_progress_file, df = load_user_progress(st.session_state.user_name)
             update_session_progress_from_df(st.session_state.user_name, df)
-
             st.session_state.skip_ids = skip_ids
             st.session_state.low_ids = low_ids
             st.session_state.user_progress_file = user_progress_file
-
+            st.session_state.exam_name = None # 세션초기화
             st.success(f"🎉 환영합니다, {st.session_state.user_name}님!")
             st.rerun()
         else:
             st.error("❌ 암호가 틀렸습니다.")
-
 
 def load_and_filter_data(selected_source, selected_chapter: str, skip_ids: set, low_ids: set) -> None:
     if isinstance(selected_source, pd.DataFrame):
@@ -308,14 +293,12 @@ def load_and_filter_data(selected_source, selected_chapter: str, skip_ids: set, 
     st.session_state.answered = False
     st.session_state.last_question = None
 
-
 def get_new_question() -> None:
     df = st.session_state.df
     if df is not None and not df.empty:
         st.session_state.question = df.sample(1).iloc[0]
     else:
         st.session_state.question = None
-
 
 def save_wrong_answers_to_excel():
     if not st.session_state.wrong_list:
@@ -332,10 +315,8 @@ def save_wrong_answers_to_excel():
     except Exception as e:
         st.sidebar.error(f"❗엑셀 파일을 저장하는 중 오류 발생: {e}")
 
-
 def show_weekly_ranking():
     display_weekly_ranking()
-
 
 def show_wrong_list_table():
     if not st.session_state.wrong_list:
@@ -349,12 +330,10 @@ def show_wrong_list_table():
         ]
     )
 
-
 def main_page() -> None:
     st.title("📘 공인중개사 OX 퀴즈")
     st.sidebar.header("📂 문제집 선택")
 
-    # 구글 시트 기록 상태 알림 출력 후 초기화
     if st.session_state.sheet_log_status:
         st.info(st.session_state.sheet_log_status)
         st.session_state.sheet_log_status = None
@@ -366,22 +345,9 @@ def main_page() -> None:
     ]
     selected_file = st.sidebar.selectbox("로컬 CSV 선택", csv_files)
 
-    accuracy = (st.session_state.score / st.session_state.total * 100) if st.session_state.total > 0 else 0.0
-    st.sidebar.markdown(f"🎯 정답률: {accuracy:.1f}%")
-    remaining_local = st.session_state.df.shape[0] if st.session_state.df is not None else 0
-    st.sidebar.markdown(f"📝 남은 문제: {remaining_local}개")
-
-    if (uploaded_file is None) and (not selected_file):
-        st.warning("⚠️ CSV 문제 파일을 업로드하거나 선택하세요.")
-        return
-
-    # 로그인 시 복원된 세션 정보를 기반으로 skip_ids, low_ids 받아오기
-    skip_ids = st.session_state.get("skip_ids", set())
-    low_ids = st.session_state.get("low_ids", set())
-    user_progress_file = st.session_state.get("user_progress_file", None)
-
-    df_source = None
+    # 문제집 파일명 구하기
     file_label = None
+    df_source = None
     if uploaded_file is not None:
         try:
             df_source = pd.read_csv(uploaded_file)
@@ -396,6 +362,24 @@ def main_page() -> None:
         except Exception as e:
             st.error(f"{selected_file} 파일을 읽는 중 오류가 발생했습니다: {e}")
             return
+
+    # 문제집명 세션 기록
+    if file_label:
+        st.session_state.exam_name = file_label
+
+    accuracy = (st.session_state.score / st.session_state.total * 100) if st.session_state.total > 0 else 0.0
+    st.sidebar.markdown(f"🎯 정답률: {accuracy:.1f}%")
+    remaining_local = st.session_state.df.shape[0] if st.session_state.df is not None else 0
+    st.sidebar.markdown(f"📝 남은 문제: {remaining_local}개")
+
+    if (uploaded_file is None) and (not selected_file):
+        st.warning("⚠️ CSV 문제 파일을 업로드하거나 선택하세요.")
+        return
+
+    skip_ids = st.session_state.get("skip_ids", set())
+    low_ids = st.session_state.get("low_ids", set())
+    user_progress_file = st.session_state.get("user_progress_file", None)
+    exam_name = st.session_state.get("exam_name", "")
 
     if df_source is None:
         st.warning("CSV 데이터를 불러오지 못했습니다.")
@@ -414,7 +398,6 @@ def main_page() -> None:
         "특정 단원만 푸시겠습니까?", ["전체 보기"] + chapters
     )
 
-    # 문제집 혹은 단원이 변경됐거나 세션 문제 데이터가 없으면 문제 필터 및 재로드
     if (
         st.session_state.prev_selected_chapter != selected_chapter
         or st.session_state.prev_selected_file != file_label
@@ -506,6 +489,7 @@ def main_page() -> None:
                 "question_id": st.session_state.last_qnum,
                 "correct": st.session_state.last_correct,
                 "rating": "skip",
+                "exam_name": st.session_state.exam_name,
             })
             st.session_state.df = st.session_state.df[
                 st.session_state.df["문제번호"].astype(str) != st.session_state.last_qnum
@@ -523,6 +507,7 @@ def main_page() -> None:
                 "question_id": st.session_state.last_qnum,
                 "correct": st.session_state.last_correct,
                 "rating": "mid",
+                "exam_name": st.session_state.exam_name,
             })
             get_new_question()
             st.session_state.answered = False
@@ -537,6 +522,7 @@ def main_page() -> None:
                 "question_id": st.session_state.last_qnum,
                 "correct": st.session_state.last_correct,
                 "rating": "low",
+                "exam_name": st.session_state.exam_name,
             })
             get_new_question()
             st.session_state.answered = False
@@ -557,14 +543,12 @@ def main_page() -> None:
     if st.sidebar.button("❔ 오답 목록 보기"):
         show_wrong_list_table()
 
-
 def run_app() -> None:
     init_session_state()
     if not st.session_state.logged_in:
         login_page()
         return
     main_page()
-
 
 if __name__ == "__main__":
     run_app()
