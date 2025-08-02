@@ -35,6 +35,10 @@ def init_session_state() -> None:
         "last_correct": None,
         "last_qnum": None,
         "sheet_log_status": None,
+        # 로그인시 복원된 문제 필터용 상태 추가
+        "skip_ids": set(),
+        "low_ids": set(),
+        "user_progress_file": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -140,13 +144,6 @@ def update_session_progress_from_df(username: str, df):
             "해설": row.get("explanation", ""),
         })
 
-    # 상태 디버깅용 출력 (필요 시 활성화)
-    # st.write("로그인 후 복원된 상태:", {
-    #     "score": st.session_state.score,
-    #     "total": st.session_state.total,
-    #     "wrong_list_len": len(st.session_state.wrong_list),
-    # })
-
 
 def save_user_progress(file_path: str, data: dict) -> None:
     df_line = pd.DataFrame([data])
@@ -240,6 +237,11 @@ def login_page() -> None:
             skip_ids, low_ids, user_progress_file, df = load_user_progress(st.session_state.user_name)
             update_session_progress_from_df(st.session_state.user_name, df)
 
+            # -- 진행 필터용 상태 세션에 저장 --
+            st.session_state.skip_ids = skip_ids
+            st.session_state.low_ids = low_ids
+            st.session_state.user_progress_file = user_progress_file
+
             st.success(f"🎉 관리자님 환영합니다, {st.session_state.user_name}!")
             st.rerun()
 
@@ -250,6 +252,10 @@ def login_page() -> None:
 
             skip_ids, low_ids, user_progress_file, df = load_user_progress(st.session_state.user_name)
             update_session_progress_from_df(st.session_state.user_name, df)
+
+            st.session_state.skip_ids = skip_ids
+            st.session_state.low_ids = low_ids
+            st.session_state.user_progress_file = user_progress_file
 
             st.success(f"🎉 환영합니다, {st.session_state.user_name}님!")
             st.rerun()
@@ -370,7 +376,9 @@ def main_page() -> None:
         return
 
     # 로그인 시 복원된 세션 정보를 기반으로 skip_ids, low_ids 받아오기
-    skip_ids, low_ids, user_progress_file, _ = load_user_progress(st.session_state.user_name)
+    skip_ids = st.session_state.get("skip_ids", set())
+    low_ids = st.session_state.get("low_ids", set())
+    user_progress_file = st.session_state.get("user_progress_file", None)
 
     df_source = None
     file_label = None
@@ -477,7 +485,8 @@ def main_page() -> None:
             "answer": user_answer,
             "explanation": question["해설"] if ("해설" in question and pd.notna(question["해설"])) else "",
         }
-        save_user_progress(user_progress_file, data_to_save)
+        if user_progress_file:
+            save_user_progress(user_progress_file, data_to_save)
 
         st.session_state.last_correct = correct
         st.session_state.last_qnum = str(qnum_display)
@@ -489,7 +498,8 @@ def main_page() -> None:
         rating_col1, rating_col2, rating_col3 = st.columns(3)
 
         if rating_col1.button("❌ 다시 보지 않기"):
-            update_question_rating(user_progress_file, st.session_state.last_qnum, "skip")
+            if user_progress_file:
+                update_question_rating(user_progress_file, st.session_state.last_qnum, "skip")
             log_to_sheet({
                 "timestamp": datetime.now().isoformat(),
                 "user_name": st.session_state.user_name,
@@ -505,7 +515,8 @@ def main_page() -> None:
             st.rerun()
 
         if rating_col2.button("📘 이해 50~90%"):
-            update_question_rating(user_progress_file, st.session_state.last_qnum, "mid")
+            if user_progress_file:
+                update_question_rating(user_progress_file, st.session_state.last_qnum, "mid")
             log_to_sheet({
                 "timestamp": datetime.now().isoformat(),
                 "user_name": st.session_state.user_name,
@@ -518,7 +529,8 @@ def main_page() -> None:
             st.rerun()
 
         if rating_col3.button("🔄 이해 50% 미만"):
-            update_question_rating(user_progress_file, st.session_state.last_qnum, "low")
+            if user_progress_file:
+                update_question_rating(user_progress_file, st.session_state.last_qnum, "low")
             log_to_sheet({
                 "timestamp": datetime.now().isoformat(),
                 "user_name": st.session_state.user_name,
