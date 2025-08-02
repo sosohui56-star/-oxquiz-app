@@ -328,8 +328,12 @@ def main_page() -> None:
         del st.session_state.sheet_log_status
 
     uploaded_file = st.sidebar.file_uploader("문제집 업로드(CSV)", type=["csv"])
-    csv_files = [f for f in os.listdir() if f.endswith(".csv")]
-    selected_file = st.sidebar.selectbox("로컬 CSV 선택", csv_files)
+csv_files = [
+    f for f in os.listdir()
+    if f.endswith(".csv") and f not in ["progress_log.csv"]
+]
+selected_file = st.sidebar.selectbox("로컬 CSV 선택", csv_files)
+
 
     if st.session_state.total > 0:
         accuracy = (st.session_state.score / st.session_state.total) * 100
