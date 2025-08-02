@@ -89,12 +89,9 @@ def log_to_sheet(data: dict):
 
 def load_user_progress(username: str, exam_name:str=None):
     safe_name = get_safe_filename(username)
-    # 문제집명(파일명)까지 파일명에 추가 저장 → 문제집별 진도 분리!
     fname = f"{safe_name}_{exam_name}_progress.csv" if exam_name else f"{safe_name}_progress.csv"
     file_path = os.path.join(USER_DATA_DIR, fname)
-    skip_ids = set()
-    low_ids = set()
-    df = None
+    skip_ids, low_ids, df = set(), set(), None
     if os.path.exists(file_path):
         try:
             df = pd.read_csv(file_path)
@@ -212,7 +209,6 @@ def login_page() -> None:
         else:
             st.error("❌ 암호가 틀렸습니다.")
             return
-        # 진입 최초에 exam_name이 없으므로(문제집고르기 전)
         skip_ids, low_ids, user_progress_file, df = load_user_progress(st.session_state.user_name, exam_name=None)
         update_session_progress_from_df(st.session_state.user_name, df)
         st.session_state.skip_ids = skip_ids
@@ -310,8 +306,8 @@ def main_page() -> None:
     ]
     selected_file = st.sidebar.selectbox("로컬 CSV 선택", csv_files)
 
-    file_label = None
-    df_source = None
+    # 파일 로딩 및 파일명 결정(업로드>selectbox 우선)
+    df_source, file_label = None, None
     if uploaded_file is not None:
         try:
             df_source = pd.read_csv(uploaded_file)
@@ -327,63 +323,61 @@ def main_page() -> None:
             st.error(f"{selected_file} 파일을 읽는 중 오류가 발생했습니다: {e}")
             return
 
-    # 문제집명 세션 기록
-    if file_label:
-        st.session_state.exam_name = file_label
-
-    if (uploaded_file is None) and (not selected_file):
+    if not file_label:
         st.warning("⚠️ CSV 문제 파일을 업로드하거나 선택하세요.")
         return
 
-    skip_ids = st.session_state.get("skip_ids", set())
-    low_ids = st.session_state.get("low_ids", set())
-    user_progress_file = st.session_state.get("user_progress_file", None)
-    exam_name = st.session_state.get("exam_name", "")
+    # 파일명(문제집명) 세션 동기화
+    st.session_state.exam_name = file_label
 
-    # [이 부분 추가!] 문제집 변경시마다 진행기록 & 필터 상태 세션 복원!
-    if (
-        st.session_state.prev_selected_file != file_label
-        or st.session_state.df is None
-    ):
+    # 문제집이 바뀔 때마다(업로드/선택) 진도 복원
+    if st.session_state.get("prev_selected_file", None) != file_label or st.session_state.df is None:
         st.session_state.prev_selected_file = file_label
-        skip_ids, low_ids, user_progress_file, df = load_user_progress(st.session_state.user_name, exam_name)
+        skip_ids, low_ids, user_progress_file, df = load_user_progress(
+            st.session_state.user_name, file_label
+        )
         st.session_state.skip_ids = skip_ids
         st.session_state.low_ids = low_ids
         st.session_state.user_progress_file = user_progress_file
         update_session_progress_from_df(st.session_state.user_name, df)
+
+        df_loaded_temp = df_source.dropna(subset=["문제", "정답"])
+        chapters = sorted(df_loaded_temp["단원명"].dropna().unique()) if "단원명" in df_loaded_temp.columns else []
+        selected_chapter = st.sidebar.selectbox(
+            "특정 단원만 푸시겠습니까?", ["전체 보기"] + chapters, key="chapter_select"
+        )
+        st.session_state.prev_selected_chapter = selected_chapter
+        load_and_filter_data(df_source, selected_chapter, skip_ids, low_ids)
+    else:
+        df_loaded_temp = df_source.dropna(subset=["문제", "정답"])
+        chapters = sorted(df_loaded_temp["단원명"].dropna().unique()) if "단원명" in df_loaded_temp.columns else []
+        selected_chapter = st.sidebar.selectbox(
+            "특정 단원만 푸시겠습니까?", ["전체 보기"] + chapters, key="chapter_select"
+        )
+        if st.session_state.get("prev_selected_chapter", None) != selected_chapter:
+            st.session_state.prev_selected_chapter = selected_chapter
+            load_and_filter_data(df_source, selected_chapter, st.session_state.skip_ids, st.session_state.low_ids)
 
     accuracy = (st.session_state.score / st.session_state.total * 100) if st.session_state.total > 0 else 0.0
     st.sidebar.markdown(f"🎯 정답률: {accuracy:.1f}%")
     remaining_local = st.session_state.df.shape[0] if st.session_state.df is not None else 0
     st.sidebar.markdown(f"📝 남은 문제: {remaining_local}개")
 
-    if df_source is None:
+    if st.session_state.df is None or st.session_state.df.empty:
         st.warning("CSV 데이터를 불러오지 못했습니다.")
         return
-    st.write("문제집의 열(헤더):", df_source.columns)
-    if "문제" not in df_source.columns or "정답" not in df_source.columns:
+    st.write("문제집의 열(헤더):", st.session_state.df.columns)
+
+    if "문제" not in st.session_state.df.columns or "정답" not in st.session_state.df.columns:
         st.error("CSV 파일에 '문제' 또는 '정답' 열이 없습니다.")
         st.stop()
-    df_loaded_temp = df_source.dropna(subset=["문제", "정답"])
-
-    chapters = sorted(df_loaded_temp["단원명"].dropna().unique()) if "단원명" in df_loaded_temp.columns else []
-    selected_chapter = st.sidebar.selectbox(
-        "특정 단원만 푸시겠습니까?", ["전체 보기"] + chapters
-    )
-
-    # 단원만 바꿔도 재필터+진행기록 세션 유지!
-    if (
-        st.session_state.prev_selected_chapter != selected_chapter
-        or st.session_state.df is None
-    ):
-        st.session_state.prev_selected_chapter = selected_chapter
-        load_and_filter_data(df_source, selected_chapter, st.session_state.skip_ids, st.session_state.low_ids)
 
     if st.session_state.question is None:
         get_new_question()
     if st.session_state.question is None:
         st.info("선택한 단원에 문제 데이터가 없거나, 이전에 모두 풀었습니다.")
         st.stop()
+
     question = st.session_state.question
     qnum = question["문제번호"]
     try:
@@ -402,6 +396,8 @@ def main_page() -> None:
         user_answer = "X"
     elif col3.button("⁉️ 모름"):
         user_answer = "모름"
+
+    user_progress_file = st.session_state.get("user_progress_file", None)
 
     if user_answer:
         st.session_state.total += 1
