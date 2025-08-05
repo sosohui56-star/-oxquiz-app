@@ -315,6 +315,15 @@ def get_new_question() -> None:
         st.session_state.question = df.sample(1).iloc[0]
     else:
         st.session_state.question = None
+def main_page() -> None:
+    st.write("### 현재 상태 점검")
+    st.write("st.session_state.df shape:", None if st.session_state.df is None else st.session_state.df.shape)
+    st.write("st.session_state.question:", st.session_state.question)
+    st.write("st.session_state.need_rerun:", st.session_state.get("need_rerun", False))
+    st.write("---")
+    
+    # ... 기존 main_page 코드 계속 ...
+
 
 def main_page() -> None:
     rerun_if_needed()  # 재실행 플래그 체크 및 처리
@@ -577,7 +586,21 @@ def load_data_from_google_sheet(spreadsheet_url_or_id: str, worksheet_name: str 
 def run_app() -> None:
     init_session_state()
 
-    rerun_if_needed()  # 플래그 확인 및 롤백(re-run)
+    # 상태 출력 (디버깅용)
+    st.write("#### run_app 진입 시 상태 점검")
+    st.write("need_rerun 플래그 상태:", st.session_state.get("need_rerun", False))
+
+    # 재실행 플래그 확인 및 실행
+    if st.session_state.get("need_rerun", False):
+        st.session_state["need_rerun"] = False
+        try:
+            st.experimental_rerun()
+        except AttributeError:
+            try:
+                st.session_state["rerun"] = True
+                st.experimental_rerun()
+            except:
+                pass
 
     if not st.session_state.logged_in:
         login_page()
