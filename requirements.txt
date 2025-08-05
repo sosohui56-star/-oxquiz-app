@@ -1,5 +1,7 @@
 streamlit>=1.28.0
-gspread>=6.0.0  # 이 줄을 이렇게 바꿔주세요!
+gspread>=6.0.0
 google-auth>=2.15.0
 google-auth-oauthlib>=1.0.0
 pandas>=1.5.0
+google-api-python-client # <--- 이 줄이 추가되어야 합니다.
+google-auth-httplib2 # <--- 이 줄이 추가되어야 합니다.
