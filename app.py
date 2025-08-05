@@ -37,7 +37,7 @@ def init_session_state() -> None:
         "low_ids": set(),
         "user_progress_file": None,
         "exam_name": None,
-        "gsheet_files": [], # Google Drive에서 찾은 스프레드시트 목록
+        # "gsheet_files": [], # Google Drive에서 찾은 스프레드시트 목록 (사용하지 않음)
         "selected_gsheet_name": None, # 사용자가 선택한 스프레드시트 이름
         "selected_worksheet_name": None, # 사용자가 선택한 워크시트 이름
     }
@@ -67,7 +67,16 @@ def connect_to_gspread() -> 'gspread.Client':
         "https://www.googleapis.com/auth/drive", # Drive API 접근을 위해 추가
     ]
     creds_data = st.secrets.get("GCP_CREDENTIALS", {})
-    creds_dict = json.loads(creds_data) if isinstance(creds_data, str) else dict(creds_data)
+    # GCP_CREDENTIALS가 문자열인 경우 JSON 파싱
+    if isinstance(creds_data, str):
+        try:
+            creds_dict = json.loads(creds_data)
+        except json.JSONDecodeError as e:
+            st.error(f"GCP_CREDENTIALS 파싱 오류: {e}. secrets.toml 또는 Streamlit Secrets 형식을 확인하세요.")
+            st.stop()
+    else:
+        creds_dict = dict(creds_data)
+
     credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(credentials)
     return client
@@ -83,17 +92,16 @@ def log_to_sheet(data: dict):
     ]
     try:
         client = connect_to_gspread()
+        # oxquiz_progress_log 스프레드시트 이름은 고정
         sheet = client.open("oxquiz_progress_log").worksheet("시트1") # 진행 로그 시트 이름 확인 (여기선 '시트1')
         sheet.append_row(row)
         st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
-        # st.info("✅ 구글 시트에 기록 성공!") # 메인 화면에 정보 표시용으로 사용 (로그 기록 시 너무 자주 뜸)
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
         st.error(f"📛 구글 시트 기록 실패: {e}")
 
 def load_user_progress(username: str, exam_name:str=None):
     safe_name = get_safe_filename(username)
-    # exam_name에 스프레드시트 이름과 워크시트 이름 모두 포함하도록 변경
     fname = f"{safe_name}_{exam_name}_progress.csv" if exam_name else f"{safe_name}_progress.csv"
     file_path = os.path.join(USER_DATA_DIR, fname)
     skip_ids, low_ids, df = set(), set(), None
@@ -314,53 +322,16 @@ def show_wrong_list_table():
         ]
     )
 
-@st.cache_data(ttl=3600) # 1시간 캐시
-def get_gsheets_in_drive(folder_name: str = None) -> list:
-    """
-    Google Drive에서 특정 폴더 내의 Google 스프레드시트 목록을 가져옵니다.
-    폴더 이름이 제공되지 않으면 모든 스프레드시트를 검색합니다.
-    """
-    try:
-        client = connect_to_gspread() # gspread 클라이언트 가져오기
-        
-        # gspread 클라이언트의 drive 속성을 통해 Drive API에 접근
-        # 이 부분이 이전 버전에서 문제가 되었던 client.drive.list()와 다름
-        # gspread 6.x 버전대에서는 client.gc.drive로 접근할 수 있습니다.
-        drive_service = client.gc.drive if hasattr(client, 'gc') and hasattr(client.gc, 'drive') else None
+# @st.cache_data(ttl=3600) # 더 이상 Google Drive 폴더 탐색을 하지 않으므로 캐시 데코레이터 제거
+# def get_gsheets_in_drive(folder_name: str = None) -> list:
+#     """
+#     Google Drive에서 특정 폴더 내의 Google 스프레드시트 목록을 가져옵니다.
+#     gspread는 Drive 폴더를 직접 탐색하는 기능을 지원하지 않습니다.
+#     이 함수는 더 이상 사용되지 않습니다.
+#     """
+#     st.error("이 함수는 더 이상 사용되지 않습니다. get_gsheets_in_drive 함수를 호출하지 마세요.")
+#     return []
 
-        if not drive_service:
-            st.error("Google Drive API 서비스에 접근할 수 없습니다. gspread 버전 또는 인증 설정을 확인하세요.")
-            return []
-
-        files = []
-        if folder_name:
-            # 폴더 ID를 먼저 검색
-            folder_query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
-            folder_result = drive_service.files().list(q=folder_query).execute().get('files', [])
-            
-            if not folder_result:
-                st.warning(f"Google Drive에서 폴더 '{folder_name}'를 찾을 수 없습니다. 모든 스프레드시트를 검색합니다.")
-                # 폴더를 찾지 못했으면 폴더 필터 없이 모든 스프레드시트 검색
-                spreadsheet_query = "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
-                files_result = drive_service.files().list(q=spreadsheet_query, orderBy="name").execute().get('files', [])
-                files = [{'id': f['id'], 'name': f['name']} for f in files_result]
-
-            else:
-                folder_id = folder_result[0]['id']
-                spreadsheet_query = f"mimeType='application/vnd.google-apps.spreadsheet' and '{folder_id}' in parents and trashed=false"
-                files_result = drive_service.files().list(q=spreadsheet_query, orderBy="name").execute().get('files', [])
-                files = [{'id': f['id'], 'name': f['name']} for f in files_result]
-        else:
-            # 폴더 이름이 없으면 모든 스프레드시트 검색
-            spreadsheet_query = "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
-            files_result = drive_service.files().list(q=spreadsheet_query, orderBy="name").execute().get('files', [])
-            files = [{'id': f['id'], 'name': f['name']} for f in files_result]
-
-        return files
-    except Exception as e:
-        st.error(f"Google Drive에서 스프레드시트 목록을 가져오는 중 오류가 발생했습니다: {e}")
-        st.warning("Google Drive API 권한 및 서비스 계정 설정이 올바른지 확인해주세요.")
-        return []
 
 @st.cache_data(ttl=3600) # 1시간 캐시
 def get_worksheet_names(spreadsheet_id: str) -> list:
@@ -387,7 +358,7 @@ def load_data_from_google_sheet(spreadsheet_id: str, worksheet_name: str) -> pd.
         df = pd.DataFrame(data)
         return df
     except SpreadsheetNotFound:
-        st.error(f"Google 스프레드시트 '{spreadsheet_id}'를 찾을 수 없습니다. ID를 확인하세요.")
+        st.error(f"Google 스프레드시트 ID '{spreadsheet_id}'를 찾을 수 없습니다. ID를 확인하세요.")
         return pd.DataFrame()
     except WorksheetNotFound:
         st.error(f"워크시트 '{worksheet_name}'를 찾을 수 없습니다. 이름을 확인하세요.")
@@ -404,24 +375,43 @@ def main_page() -> None:
         st.info(st.session_state.sheet_log_status)
         st.session_state.sheet_log_status = None
 
-    # Google Drive 폴더 이름 설정 (선택 사항)
-    # 여기에 문제집 스프레드시트가 들어있는 Google Drive 폴더 이름을 입력하세요.
-    # 예: quiz_folder_name = "나의 퀴즈 문제집"
-    # 폴더가 없거나 모든 스프레드시트를 검색하고 싶다면 None으로 두세요.
-    quiz_folder_name = "퀴즈 문제집" 
+    # Google Drive에서 스프레드시트 목록 가져오기 로직 제거
+    # 대신 사용자가 직접 스프레드시트 이름/ID를 입력하거나, 미리 정의된 목록에서 선택
+    
+    # 미리 정의된 스프레드시트 목록 또는 ID를 여기서 관리
+    # 예시: { "문제집 이름": "스프레드시트_ID_또는_정확한_이름" }
+    # 실제 Google Drive의 "퀴즈 문제집" 폴더에 있는 스프레드시트 이름과 ID를 사용하세요.
+    # ID가 더 정확합니다. ID는 스프레드시트 URL에서 https://docs.google.com/spreadsheets/d/여기부터가ID/edit#gid=... 형식입니다.
+    
+    # -------------------------------------------------------------
+    # TODO: 여기에 실제 스프레드시트 ID와 이름(선택 사항)을 입력하세요!
+    # 이 부분은 수동으로 작성해야 합니다.
+    # 예시: "2차 세법" 시트의 ID가 "1a2b3c4d5e6f..." 라면 아래처럼
+    
+    # your_gsheet_options = {
+    #     "1차 민법": "1x-abcdeFGHIJKLMNOPQRSTUVW",
+    #     "2차 중개사법": "1y-abcdeFGHIJKLMNOPQRSTUVW",
+    #     "2차 세법": "1z-abcdeFGHIJKLMNOPQRSTUVW",
+    #     # 더 많은 문제집이 있다면 여기에 추가하세요
+    # }
+    
+    # 스크린샷에서 확인된 스프레드시트들의 ID를 Google Drive에서 직접 복사하여 넣으세요.
+    # 각 스프레드시트를 Google Drive에서 열고, URL에서 ID 부분을 복사하시면 됩니다.
+    your_gsheet_options = {
+        "1차 민법": "12wJkK8K7L0M1N2O3P4Q5R6S7T8U9V0W", # 실제 ID로 변경 필요
+        "2차 중개사법": "1x-ABCDEFG_HIJKLMNOPQRSTUV", # 실제 ID로 변경 필요
+        "2차 세법": "1y-UVWXYZ_ABCDEFGHIJKLMNO", # 실제 ID로 변경 필요
+        "oxquiz_progress_log": "1z-PQRSTUV_WXYZABCDEFGH", # 로그 시트도 필요하다면 추가
+    }
+    # -------------------------------------------------------------
 
-    # Google Drive에서 스프레드시트 목록 가져오기
-    if "gsheet_files" not in st.session_state or not st.session_state.gsheet_files:
-        st.session_state.gsheet_files = get_gsheets_in_drive(quiz_folder_name)
-        if not st.session_state.gsheet_files:
-            st.warning("Google Drive에서 문제집 스프레드시트를 찾을 수 없습니다. 폴더 이름('퀴즈 문제집')을 확인하거나, 서비스 계정에 해당 폴더/파일에 대한 접근 권한이 있는지 확인하세요.")
-            st.warning(f"팁: '{quiz_folder_name}' 폴더를 생성하고 서비스 계정 이메일 주소({st.secrets.get('GCP_CREDENTIALS', {}).get('client_email', '클라이언트 이메일 없음')})와 공유해주세요.")
-            return
+    if not your_gsheet_options:
+        st.error("⚠️ 문제집 스프레드시트 ID를 코드에 설정해야 합니다.")
+        st.stop() # 설정이 안되면 앱 중단
 
-    gsheet_options = {f['name']: f['id'] for f in st.session_state.gsheet_files}
     selected_gsheet_name = st.sidebar.selectbox(
         "문제집 스프레드시트를 선택하세요",
-        options=["선택하세요"] + list(gsheet_options.keys()),
+        options=["선택하세요"] + list(your_gsheet_options.keys()),
         key="gsheet_select"
     )
 
@@ -431,7 +421,7 @@ def main_page() -> None:
     file_label = None
 
     if selected_gsheet_name and selected_gsheet_name != "선택하세요":
-        selected_spreadsheet_id = gsheet_options[selected_gsheet_name]
+        selected_spreadsheet_id = your_gsheet_options[selected_gsheet_name]
         st.session_state.selected_gsheet_name = selected_gsheet_name # 세션 상태 저장
 
         # 선택된 스프레드시트의 워크시트 목록 가져오기
