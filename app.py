@@ -38,7 +38,7 @@ def init_session_state() -> None:
         "exam_name": None,
         "selected_gsheet_name": None,
         "selected_worksheet_name": None,
-        "need_rerun": False,  # 플래그 추가
+        "need_rerun": False,  # 재실행 플래그 추가
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -275,7 +275,6 @@ def login_page() -> None:
         st.session_state.answered = False
         st.session_state.prev_selected_file = None
         st.session_state.prev_selected_chapter = None
-        # 바로 재실행 시도는 플래그 활용하도록 변경
         st.session_state.need_rerun = True
 
 def load_and_filter_data(df_loaded: pd.DataFrame, selected_chapter: str, skip_ids: set, low_ids: set) -> None:
@@ -318,7 +317,7 @@ def get_new_question() -> None:
         st.session_state.question = None
 
 def main_page() -> None:
-    rerun_if_needed()  # 페이지 최상단에 실행 재요청 플래그 확인 및 처리
+    rerun_if_needed()  # 재실행 플래그 체크 및 처리
 
     st.title("📘 공인중개사 OX 퀴즈")
     st.sidebar.header("📂 문제집 선택")
@@ -460,7 +459,6 @@ def main_page() -> None:
             }
             if st.session_state.user_progress_file:
                 save_user_progress(st.session_state.user_progress_file, data_to_save)
-                # 로그 구글시트 기록 가능
                 # log_to_sheet(data_to_save)
             st.session_state.last_correct = correct
             st.session_state.last_qnum = str(qnum_display)
@@ -578,9 +576,11 @@ def load_data_from_google_sheet(spreadsheet_url_or_id: str, worksheet_name: str 
 
 def run_app() -> None:
     init_session_state()
+
+    rerun_if_needed()  # 플래그 확인 및 롤백(re-run)
+
     if not st.session_state.logged_in:
         login_page()
-        rerun_if_needed()  # 로그인 후 즉시 재실행 처리
         return
     main_page()
 
