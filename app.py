@@ -38,6 +38,7 @@ def init_session_state() -> None:
         "exam_name": None,
         "selected_gsheet_name": None,
         "selected_worksheet_name": None,
+        "need_rerun": False,  # 플래그 추가
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -234,6 +235,18 @@ def show_accuracy():
     else:
         st.sidebar.markdown("🎯 문제집별 정답률: 정보 없음")
 
+def rerun_if_needed():
+    if st.session_state.get("need_rerun", False):
+        st.session_state["need_rerun"] = False
+        try:
+            st.experimental_rerun()
+        except AttributeError:
+            try:
+                st.session_state["rerun"] = True
+                st.experimental_rerun()
+            except Exception:
+                pass
+
 def login_page() -> None:
     st.title("🔐 사용자 로그인")
     name_input = st.text_input("이름을 입력하세요")
@@ -262,15 +275,8 @@ def login_page() -> None:
         st.session_state.answered = False
         st.session_state.prev_selected_file = None
         st.session_state.prev_selected_chapter = None
-        # 재실행 시도
-        try:
-            st.experimental_rerun()
-        except AttributeError:
-            try:
-                st.session_state["rerun"] = True
-                st.experimental_rerun()
-            except Exception:
-                pass
+        # 바로 재실행 시도는 플래그 활용하도록 변경
+        st.session_state.need_rerun = True
 
 def load_and_filter_data(df_loaded: pd.DataFrame, selected_chapter: str, skip_ids: set, low_ids: set) -> None:
     if df_loaded.empty:
@@ -312,6 +318,8 @@ def get_new_question() -> None:
         st.session_state.question = None
 
 def main_page() -> None:
+    rerun_if_needed()  # 페이지 최상단에 실행 재요청 플래그 확인 및 처리
+
     st.title("📘 공인중개사 OX 퀴즈")
     st.sidebar.header("📂 문제집 선택")
 
@@ -368,7 +376,7 @@ def main_page() -> None:
                     else:
                         st.error("❌ 문제집을 불러올 수 없습니다. URL과 워크시트 이름을 확인하세요.")
 
-    show_accuracy()  # 추가: 정답률 표시
+    show_accuracy()
 
     if st.session_state.df is not None and not st.session_state.df.empty:
         st.subheader("📚 퀴즈 시작")
@@ -464,16 +472,6 @@ def main_page() -> None:
 
             rating_col1, rating_col2, rating_col3 = st.columns(3)
 
-            def rerun_safely():
-                try:
-                    st.experimental_rerun()
-                except AttributeError:
-                    try:
-                        st.session_state["rerun"] = True
-                        st.experimental_rerun()
-                    except:
-                        pass
-
             if rating_col1.button("❌ 다시 보지 않기"):
                 if st.session_state.user_progress_file:
                     update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, "skip")
@@ -488,7 +486,7 @@ def main_page() -> None:
                 st.session_state.df = st.session_state.df[st.session_state.df["문제번호"].astype(str) != st.session_state.last_qnum].reset_index(drop=True)
                 get_new_question()
                 st.session_state.answered = False
-                rerun_safely()
+                st.session_state.need_rerun = True
 
             if rating_col2.button("📘 이해 50~90%"):
                 if st.session_state.user_progress_file:
@@ -503,7 +501,7 @@ def main_page() -> None:
                 })
                 get_new_question()
                 st.session_state.answered = False
-                rerun_safely()
+                st.session_state.need_rerun = True
 
             if rating_col3.button("🔄 이해 50% 미만"):
                 if st.session_state.user_progress_file:
@@ -518,7 +516,7 @@ def main_page() -> None:
                 })
                 get_new_question()
                 st.session_state.answered = False
-                rerun_safely()
+                st.session_state.need_rerun = True
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
@@ -582,6 +580,7 @@ def run_app() -> None:
     init_session_state()
     if not st.session_state.logged_in:
         login_page()
+        rerun_if_needed()  # 로그인 후 즉시 재실행 처리
         return
     main_page()
 
