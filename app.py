@@ -7,6 +7,8 @@ import json
 import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
+import gspread # gspread 라이브러리 추가
+from gspread.exceptions import SpreadsheetNotFound, WorksheetNotFound # 예외 처리 추가
 
 USER_DATA_DIR = "user_data"
 os.makedirs(USER_DATA_DIR, exist_ok=True)
@@ -25,7 +27,7 @@ def init_session_state() -> None:
         "question": None,
         "last_question": None,
         "df": None,
-        "prev_selected_file": None,
+        "prev_selected_file": None, # 스프레드시트 이름 (또는 ID + 시트 이름 조합)
         "prev_selected_chapter": None,
         "is_admin": False,
         "last_correct": None,
@@ -35,6 +37,9 @@ def init_session_state() -> None:
         "low_ids": set(),
         "user_progress_file": None,
         "exam_name": None,
+        "gsheet_files": [], # Google Drive에서 찾은 스프레드시트 목록
+        "selected_gsheet_name": None, # 사용자가 선택한 스프레드시트 이름
+        "selected_worksheet_name": None, # 사용자가 선택한 워크시트 이름
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -54,20 +59,18 @@ def record_user_activity() -> None:
     except Exception as e:
         st.warning(f"기록 파일에 저장하는 중 오류가 발생했습니다: {e}")
 
-def connect_to_sheet() -> 'gspread.Worksheet':
-    import gspread
-
+def connect_to_gspread() -> 'gspread.Client':
+    """gspread 클라이언트 객체를 반환합니다."""
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive", # Drive API 접근을 위해 추가
     ]
     creds_data = st.secrets.get("GCP_CREDENTIALS", {})
     creds_dict = json.loads(creds_data) if isinstance(creds_data, str) else dict(creds_data)
     credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(credentials)
-    sheet = client.open("oxquiz_progress_log").worksheet("시트1")
-    return sheet
+    return client
 
 def log_to_sheet(data: dict):
     row = [
@@ -79,16 +82,18 @@ def log_to_sheet(data: dict):
         str(data.get("exam_name") or ""),
     ]
     try:
-        sheet = connect_to_sheet()
+        client = connect_to_gspread()
+        sheet = client.open("oxquiz_progress_log").worksheet("시트1") # 진행 로그 시트 이름 확인 (여기선 '시트1')
         sheet.append_row(row)
         st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
-        st.info("✅ 구글 시트에 기록 성공!")
+        # st.info("✅ 구글 시트에 기록 성공!") # 메인 화면에 정보 표시용으로 사용 (로그 기록 시 너무 자주 뜸)
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
         st.error(f"📛 구글 시트 기록 실패: {e}")
 
 def load_user_progress(username: str, exam_name:str=None):
     safe_name = get_safe_filename(username)
+    # exam_name에 스프레드시트 이름과 워크시트 이름 모두 포함하도록 변경
     fname = f"{safe_name}_{exam_name}_progress.csv" if exam_name else f"{safe_name}_progress.csv"
     file_path = os.path.join(USER_DATA_DIR, fname)
     skip_ids, low_ids, df = set(), set(), None
@@ -199,7 +204,7 @@ def login_page() -> None:
         group = group_input.strip()
         user_name = f"{name} ({group})" if group else name
         st.session_state.user_name = user_name
-        st.session_state.exam_name = None
+        st.session_state.exam_name = None # 로그인 시 시험 이름 초기화
         if password == "admin" or group.lower() in ("admin", "관리자"):
             st.session_state.is_admin = True
             st.session_state.logged_in = True
@@ -209,50 +214,68 @@ def login_page() -> None:
         else:
             st.error("❌ 암호가 틀렸습니다.")
             return
-        skip_ids, low_ids, user_progress_file, df = load_user_progress(st.session_state.user_name, exam_name=None)
-        update_session_progress_from_df(st.session_state.user_name, df)
-        st.session_state.skip_ids = skip_ids
-        st.session_state.low_ids = low_ids
-        st.session_state.user_progress_file = user_progress_file
+        
+        # 로그인 시 기존 진행 상황 초기화 (문제집 선택에 따라 새로 로드됨)
+        st.session_state.skip_ids = set()
+        st.session_state.low_ids = set()
+        st.session_state.user_progress_file = None
+        st.session_state.df = None
+        st.session_state.question = None
+        st.session_state.answered = False
+        st.session_state.prev_selected_file = None # 이전 파일 선택 기록 초기화
+        st.session_state.prev_selected_chapter = None # 이전 단원 선택 기록 초기화
+
         st.rerun()
 
-def load_and_filter_data(selected_source, selected_chapter: str, skip_ids: set, low_ids: set) -> None:
-    if isinstance(selected_source, pd.DataFrame):
-        df_loaded = selected_source.copy()
-    else:
-        try:
-            df_loaded = pd.read_csv(selected_source)
-        except FileNotFoundError:
-            st.error(f"{selected_source} 파일을 찾을 수 없습니다.")
-            st.session_state.df = pd.DataFrame()
-            return
-        except Exception as e:
-            st.error(f"{selected_source} 파일을 읽는 중 오류가 발생했습니다: {e}")
-            st.session_state.df = pd.DataFrame()
-            return
+def load_and_filter_data(df_loaded: pd.DataFrame, selected_chapter: str, skip_ids: set, low_ids: set) -> None:
+    """로드된 데이터프레임을 필터링하고 세션 상태에 저장합니다."""
+    if df_loaded.empty:
+        st.session_state.df = pd.DataFrame()
+        st.session_state.question = None
+        st.session_state.answered = False
+        st.session_state.last_question = None
+        return
+
     required_cols = {"문제", "정답"}
     missing = required_cols - set(df_loaded.columns)
     if missing:
-        st.error(f"CSV 파일에 필수 열 {missing} 이/가 없습니다. 헤더를 확인하세요.")
+        st.error(f"스프레드시트에 필수 열 {missing} 이/가 없습니다. 헤더를 확인하세요.")
         st.session_state.df = pd.DataFrame()
+        st.session_state.question = None
+        st.session_state.answered = False
+        st.session_state.last_question = None
         return
-    df_loaded = df_loaded.dropna(subset=["문제", "정답"])
+    
+    df_loaded = df_loaded.dropna(subset=["문제", "정답"]).copy() # 원본 DataFrame을 수정하지 않도록 copy() 사용
+    
     if "문제번호" not in df_loaded.columns:
         df_loaded["문제번호"] = range(1, len(df_loaded) + 1)
-    if selected_chapter != "전체 보기":
-        df_filtered = df_loaded[df_loaded["단원명"] == selected_chapter]
-    else:
-        df_filtered = df_loaded
+    
+    df_filtered = df_loaded.copy() # 필터링 시작 전 복사본 생성
+
+    if selected_chapter != "전체 보기" and "단원명" in df_filtered.columns:
+        df_filtered = df_filtered[df_filtered["단원명"] == selected_chapter]
+    
+    # skip_ids와 low_ids는 string 타입으로 다룸
+    df_filtered["문제번호_str"] = df_filtered["문제번호"].astype(str)
+
     if skip_ids:
-        df_filtered = df_filtered[~df_filtered["문제번호"].astype(str).isin(skip_ids)]
+        df_filtered = df_filtered[~df_filtered["문제번호_str"].isin(skip_ids)]
+    
     if low_ids:
-        low_df = df_filtered[df_filtered["문제번호"].astype(str).isin(low_ids)]
+        # low_ids는 필터링된 데이터에 다시 추가
+        low_df = df_loaded[df_loaded["문제번호_str"].isin(low_ids)]
         if not low_df.empty:
-            df_filtered = pd.concat([df_filtered, low_df], ignore_index=True)
+            # 기존 필터링된 df_filtered와 low_df를 합칠 때 중복 제거
+            df_filtered = pd.concat([df_filtered, low_df]).drop_duplicates(subset=["문제번호_str"]).reset_index(drop=True)
+            
+    df_filtered = df_filtered.drop(columns=["문제번호_str"]) # 임시 컬럼 제거
+
     st.session_state.df = df_filtered.reset_index(drop=True)
     st.session_state.question = None
     st.session_state.answered = False
     st.session_state.last_question = None
+
 
 def get_new_question() -> None:
     df = st.session_state.df
@@ -291,6 +314,83 @@ def show_wrong_list_table():
         ]
     )
 
+@st.cache_data(ttl=3600) # 1시간 캐시
+def get_gsheets_in_drive(folder_name: str = None) -> list:
+    """
+    Google Drive에서 특정 폴더 내의 Google 스프레드시트 목록을 가져옵니다.
+    폴더 이름이 제공되지 않으면 모든 스프레드시트를 검색합니다.
+    """
+    try:
+        client = connect_to_gspread()
+        
+        # Drive API 클라이언트 가져오기
+        # gspread.client.Client 객체는 drive 속성을 가지고 있습니다.
+        drive_client = client.drive
+
+        files = []
+        if folder_name:
+            # 폴더 ID를 먼저 검색
+            folder_query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
+            folder_result = drive_client.list(q=folder_query).get('files', [])
+            
+            if not folder_result:
+                st.warning(f"Google Drive에서 폴더 '{folder_name}'를 찾을 수 없습니다. 모든 스프레드시트를 검색합니다.")
+                # 폴더를 찾지 못했으면 폴더 필터 없이 모든 스프레드시트 검색
+                spreadsheet_query = "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
+                files_result = drive_client.list(q=spreadsheet_query, orderBy="name").get('files', [])
+                files = [{'id': f['id'], 'name': f['name']} for f in files_result]
+
+            else:
+                folder_id = folder_result[0]['id']
+                spreadsheet_query = f"mimeType='application/vnd.google-apps.spreadsheet' and '{folder_id}' in parents and trashed=false"
+                files_result = drive_client.list(q=spreadsheet_query, orderBy="name").get('files', [])
+                files = [{'id': f['id'], 'name': f['name']} for f in files_result]
+        else:
+            # 폴더 이름이 없으면 모든 스프레드시트 검색
+            spreadsheet_query = "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
+            files_result = drive_client.list(q=spreadsheet_query, orderBy="name").get('files', [])
+            files = [{'id': f['id'], 'name': f['name']} for f in files_result]
+
+        return files
+    except Exception as e:
+        st.error(f"Google Drive에서 스프레드시트 목록을 가져오는 중 오류가 발생했습니다: {e}")
+        st.warning("Google Drive API 권한 및 서비스 계정 설정이 올바른지 확인해주세요.")
+        return []
+
+@st.cache_data(ttl=3600) # 1시간 캐시
+def get_worksheet_names(spreadsheet_id: str) -> list:
+    """특정 스프레드시트의 워크시트 이름을 가져옵니다."""
+    try:
+        client = connect_to_gspread()
+        spreadsheet = client.open_by_key(spreadsheet_id)
+        worksheets = spreadsheet.worksheets()
+        return [ws.title for ws in worksheets]
+    except SpreadsheetNotFound:
+        st.error("지정된 스프레드시트 ID를 찾을 수 없습니다. ID가 올바른지 확인하세요.")
+        return []
+    except Exception as e:
+        st.error(f"워크시트 이름을 가져오는 중 오류가 발생했습니다: {e}")
+        return []
+
+@st.cache_data(ttl=3600) # 1시간 캐시
+def load_data_from_google_sheet(spreadsheet_id: str, worksheet_name: str) -> pd.DataFrame:
+    """특정 Google 스프레드시트의 워크시트에서 데이터를 로드합니다."""
+    try:
+        client = connect_to_gspread()
+        sheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
+        data = sheet.get_all_records()
+        df = pd.DataFrame(data)
+        return df
+    except SpreadsheetNotFound:
+        st.error(f"Google 스프레드시트 '{spreadsheet_id}'를 찾을 수 없습니다. ID를 확인하세요.")
+        return pd.DataFrame()
+    except WorksheetNotFound:
+        st.error(f"워크시트 '{worksheet_name}'를 찾을 수 없습니다. 이름을 확인하세요.")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Google 스프레드시트에서 데이터를 읽는 중 오류가 발생했습니다: {e}")
+        return pd.DataFrame()
+
 def main_page() -> None:
     st.title("📘 공인중개사 OX 퀴즈")
     st.sidebar.header("📂 문제집 선택")
@@ -299,48 +399,78 @@ def main_page() -> None:
         st.info(st.session_state.sheet_log_status)
         st.session_state.sheet_log_status = None
 
-    uploaded_file = st.sidebar.file_uploader("문제집 업로드(CSV)", type=["csv"])
-    csv_files = [
-        f for f in os.listdir()
-        if f.endswith(".csv") and f not in ["progress_log.csv"]
-    ]
-    selected_file = st.sidebar.selectbox("로컬 CSV 선택", csv_files)
+    # Google Drive 폴더 이름 설정 (선택 사항)
+    # 여기에 문제집 스프레드시트가 들어있는 Google Drive 폴더 이름을 입력하세요.
+    # 예: quiz_folder_name = "나의 퀴즈 문제집"
+    # 폴더가 없거나 모든 스프레드시트를 검색하고 싶다면 None으로 두세요.
+    quiz_folder_name = "퀴즈 문제집" 
 
-    # 파일 로딩 및 파일명 결정(업로드>selectbox 우선)
-    df_source, file_label = None, None
-    if uploaded_file is not None:
-        try:
-            df_source = pd.read_csv(uploaded_file)
-            file_label = uploaded_file.name
-        except Exception as e:
-            st.error(f"업로드된 CSV를 읽는 중 오류가 발생했습니다: {e}")
-            return
-    elif selected_file:
-        try:
-            df_source = pd.read_csv(selected_file)
-            file_label = selected_file
-        except Exception as e:
-            st.error(f"{selected_file} 파일을 읽는 중 오류가 발생했습니다: {e}")
+    # Google Drive에서 스프레드시트 목록 가져오기
+    if "gsheet_files" not in st.session_state or not st.session_state.gsheet_files:
+        st.session_state.gsheet_files = get_gsheets_in_drive(quiz_folder_name)
+        if not st.session_state.gsheet_files:
+            st.warning("Google Drive에서 문제집 스프레드시트를 찾을 수 없습니다. 폴더 이름('퀴즈 문제집')을 확인하거나, 서비스 계정에 해당 폴더/파일에 대한 접근 권한이 있는지 확인하세요.")
+            st.warning(f"팁: '{quiz_folder_name}' 폴더를 생성하고 서비스 계정 이메일 주소({st.secrets.get('GCP_CREDENTIALS', {}).get('client_email', '클라이언트 이메일 없음')})와 공유해주세요.")
             return
 
+    gsheet_options = {f['name']: f['id'] for f in st.session_state.gsheet_files}
+    selected_gsheet_name = st.sidebar.selectbox(
+        "문제집 스프레드시트를 선택하세요",
+        options=["선택하세요"] + list(gsheet_options.keys()),
+        key="gsheet_select"
+    )
+
+    selected_spreadsheet_id = None
+    selected_worksheet_name = None
+    df_source = pd.DataFrame()
+    file_label = None
+
+    if selected_gsheet_name and selected_gsheet_name != "선택하세요":
+        selected_spreadsheet_id = gsheet_options[selected_gsheet_name]
+        st.session_state.selected_gsheet_name = selected_gsheet_name # 세션 상태 저장
+
+        # 선택된 스프레드시트의 워크시트 목록 가져오기
+        worksheet_names = get_worksheet_names(selected_spreadsheet_id)
+        if not worksheet_names:
+            st.warning("선택된 스프레드시트에 워크시트가 없습니다.")
+            return
+        
+        # 워크시트 선택
+        selected_worksheet_name = st.sidebar.selectbox(
+            "문제 시트를 선택하세요",
+            options=["선택하세요"] + worksheet_names,
+            key="worksheet_select"
+        )
+        st.session_state.selected_worksheet_name = selected_worksheet_name # 세션 상태 저장
+
+        if selected_worksheet_name and selected_worksheet_name != "선택하세요":
+            df_source = load_data_from_google_sheet(selected_spreadsheet_id, selected_worksheet_name)
+            if not df_source.empty:
+                file_label = f"{selected_gsheet_name} - {selected_worksheet_name}"
+            else:
+                st.warning("⚠️ 선택된 Google 스프레드시트 시트에서 데이터를 불러오지 못했습니다. 내용을 확인하세요.")
+                return
+    
     if not file_label:
-        st.warning("⚠️ CSV 문제 파일을 업로드하거나 선택하세요.")
+        st.warning("⚠️ 문제집 스프레드시트와 시트를 선택하세요.")
         return
 
     # 파일명(문제집명) 세션 동기화
     st.session_state.exam_name = file_label
 
-    # 문제집이 바뀔 때마다(업로드/선택) 진도 복원
-    if st.session_state.get("prev_selected_file", None) != file_label or st.session_state.df is None:
-        st.session_state.prev_selected_file = file_label
-        skip_ids, low_ids, user_progress_file, df = load_user_progress(
-            st.session_state.user_name, file_label
+    # 문제집(스프레드시트+워크시트)이 바뀔 때마다 진도 복원
+    current_file_identifier = f"{selected_gsheet_name}_{selected_worksheet_name}"
+    if st.session_state.get("prev_selected_file", None) != current_file_identifier or st.session_state.df is None:
+        st.session_state.prev_selected_file = current_file_identifier
+        skip_ids, low_ids, user_progress_file, df_progress = load_user_progress(
+            st.session_state.user_name, file_label # exam_name으로 file_label 사용
         )
         st.session_state.skip_ids = skip_ids
         st.session_state.low_ids = low_ids
         st.session_state.user_progress_file = user_progress_file
-        update_session_progress_from_df(st.session_state.user_name, df)
+        update_session_progress_from_df(st.session_state.user_name, df_progress)
 
+        # 단원명 목록 가져오기
         df_loaded_temp = df_source.dropna(subset=["문제", "정답"])
         chapters = sorted(df_loaded_temp["단원명"].dropna().unique()) if "단원명" in df_loaded_temp.columns else []
         selected_chapter = st.sidebar.selectbox(
@@ -349,6 +479,7 @@ def main_page() -> None:
         st.session_state.prev_selected_chapter = selected_chapter
         load_and_filter_data(df_source, selected_chapter, skip_ids, low_ids)
     else:
+        # 파일이 바뀌지 않았고, 단원이 바뀌었을 때
         df_loaded_temp = df_source.dropna(subset=["문제", "정답"])
         chapters = sorted(df_loaded_temp["단원명"].dropna().unique()) if "단원명" in df_loaded_temp.columns else []
         selected_chapter = st.sidebar.selectbox(
@@ -358,18 +489,20 @@ def main_page() -> None:
             st.session_state.prev_selected_chapter = selected_chapter
             load_and_filter_data(df_source, selected_chapter, st.session_state.skip_ids, st.session_state.low_ids)
 
+
     accuracy = (st.session_state.score / st.session_state.total * 100) if st.session_state.total > 0 else 0.0
     st.sidebar.markdown(f"🎯 정답률: {accuracy:.1f}%")
     remaining_local = st.session_state.df.shape[0] if st.session_state.df is not None else 0
     st.sidebar.markdown(f"📝 남은 문제: {remaining_local}개")
 
     if st.session_state.df is None or st.session_state.df.empty:
-        st.warning("CSV 데이터를 불러오지 못했습니다.")
+        st.warning("선택된 스프레드시트에 문제 데이터가 없거나, 데이터를 불러오지 못했습니다.")
         return
-    st.write("문제집의 열(헤더):", st.session_state.df.columns)
+    st.write(f"현재 선택된 문제집: **{st.session_state.exam_name}**")
+    st.write("문제집의 열(헤더):", st.session_state.df.columns.tolist()) # 컬럼 목록 보기 좋게 출력
 
     if "문제" not in st.session_state.df.columns or "정답" not in st.session_state.df.columns:
-        st.error("CSV 파일에 '문제' 또는 '정답' 열이 없습니다.")
+        st.error("스프레드시트에 '문제' 또는 '정답' 열이 없습니다. 헤더를 확인하세요.")
         st.stop()
 
     if st.session_state.question is None:
