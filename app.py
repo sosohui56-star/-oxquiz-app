@@ -318,7 +318,7 @@ def get_new_question() -> None:
 def main_page() -> None:
     rerun_if_needed()
 
-    # 상태 점검용 출력 추가
+    # 상태 점검용 출력
     st.write("filtered_df shape:", None if st.session_state.filtered_df is None else st.session_state.filtered_df.shape)
     st.write("현재 문제:", st.session_state.question)
 
@@ -379,8 +379,7 @@ def main_page() -> None:
                     else:
                         st.error("❌ 문제집을 불러올 수 없습니다. URL과 워크시트 이름을 확인하세요.")
                 st.session_state.filtered_df = df_source.copy()
-                get_new_question()
-                return
+                st.session_state.question = None  # 문제 초기화
             else:
                 st.error("❌ 문제집 데이터가 비어있습니다.")
                 st.session_state.filtered_df = pd.DataFrame()
