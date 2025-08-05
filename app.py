@@ -323,32 +323,37 @@ def get_gsheets_in_drive(folder_name: str = None) -> list:
     try:
         client = connect_to_gspread() # gspread 클라이언트 가져오기
         
-        # Google Drive API를 직접 사용하는 방법으로 변경
-        # gspread 클라이언트가 아닌, gspread 자체의 drive 기능을 활용
-        
+        # gspread 클라이언트의 drive 속성을 통해 Drive API에 접근
+        # 이 부분이 이전 버전에서 문제가 되었던 client.drive.list()와 다름
+        # gspread 6.x 버전대에서는 client.gc.drive로 접근할 수 있습니다.
+        drive_service = client.gc.drive if hasattr(client, 'gc') and hasattr(client.gc, 'drive') else None
+
+        if not drive_service:
+            st.error("Google Drive API 서비스에 접근할 수 없습니다. gspread 버전 또는 인증 설정을 확인하세요.")
+            return []
+
         files = []
         if folder_name:
             # 폴더 ID를 먼저 검색
-            # list() 함수의 q 매개변수를 사용하여 폴더를 검색합니다.
             folder_query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
-            folder_result = client.list_spreadsheet_files(q=folder_query)
+            folder_result = drive_service.files().list(q=folder_query).execute().get('files', [])
             
             if not folder_result:
                 st.warning(f"Google Drive에서 폴더 '{folder_name}'를 찾을 수 없습니다. 모든 스프레드시트를 검색합니다.")
                 # 폴더를 찾지 못했으면 폴더 필터 없이 모든 스프레드시트 검색
                 spreadsheet_query = "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
-                files_result = client.list_spreadsheet_files(q=spreadsheet_query)
+                files_result = drive_service.files().list(q=spreadsheet_query, orderBy="name").execute().get('files', [])
                 files = [{'id': f['id'], 'name': f['name']} for f in files_result]
 
             else:
                 folder_id = folder_result[0]['id']
                 spreadsheet_query = f"mimeType='application/vnd.google-apps.spreadsheet' and '{folder_id}' in parents and trashed=false"
-                files_result = client.list_spreadsheet_files(q=spreadsheet_query)
+                files_result = drive_service.files().list(q=spreadsheet_query, orderBy="name").execute().get('files', [])
                 files = [{'id': f['id'], 'name': f['name']} for f in files_result]
         else:
             # 폴더 이름이 없으면 모든 스프레드시트 검색
             spreadsheet_query = "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false"
-            files_result = client.list_spreadsheet_files(q=spreadsheet_query)
+            files_result = drive_service.files().list(q=spreadsheet_query, orderBy="name").execute().get('files', [])
             files = [{'id': f['id'], 'name': f['name']} for f in files_result]
 
         return files
