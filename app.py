@@ -177,13 +177,14 @@ def main_page() -> None:
     
     # 옵션 2: 미리 정의된 목록에서 선택 - 실제 스프레드시트 ID로 업데이트
     predefined_sheets = {
-        "문제집 1": "1Z9Oz04vuV7f5hbzrZ3iyn71RuB6bg0FEAL9_z10hyvs",
-        "문제집 2": "1LGlF9dUsuRsl3DVwIkHdm3XZzOCHojoYXbC2J_8RXuo",
-        "문제집 3": "1L1N6lasmt8rvVDbD3NqTJlvzIz1cRBSCqGI3Bvw6a4Y",
-        "문제집 4": "1DP-AuJ5AaMoMMDiXwMYTy4eVIpAOKnh2PXVVtgS2O_Y",
-        "문제집 5": "1prNQuzxdytOPzxpGKZw-aa76ud7RepkemIDlWpWCpMo",
-        "문제집 6": "1Lkz9_f7040gjryUxTRcbU-4NTNucBXijK9RMlL6y_QY"
-    }
+    "1차 민법": "1Z9Oz04vuV7f5hbzrZ3iyn71RuB6bg0FEAL9_z10hyvs",
+    "1차 학개론": "1LGlF9dUsuRsl3DVwIkHdm3XZzOCHojoYXbC2J_8RXuo",
+    "2차 공법": "1L1N6lasmt8rvVDbD3NqTJlvzIz1cRBSCqGI3Bvw6a4Y",
+    "2차 공시법": "1DP-AuJ5AaMoMMDiXwMYTy4eVIpAOKnh2PXVVtgS2O_Y",
+    "2차 세법": "1prNQuzxdytOPzxpGKZw-aa76ud7RepkemIDlWpWCpMo",
+    "2차 중개사법": "1Lkz9_f7040gjryUxTRcbU-4NTNucBXijK9RMlL6y_QY"
+}
+
     
     selected_predefined = st.sidebar.selectbox(
         "또는 미리 정의된 문제집에서 선택",
