@@ -5,3 +5,6 @@ google-auth
 google-auth-oauthlib
 google-auth-httplib2
 openpyxl
+```2. **Streamlit Secrets 설정**:
+- `streamlit-sheets-writer@vivid-osprey-467614-u8.iam.gserviceaccount.com`의 서비스 계정 키 정보가 올바르게 설정되어 있는지 확인
+
