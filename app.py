@@ -1,4 +1,3 @@
-
 import os
 from datetime import datetime, timedelta
 import csv
@@ -40,7 +39,7 @@ def init_session_state() -> None:
         "selected_gsheet_name": None,
         "selected_worksheet_name": None,
     }
-
+    
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -53,7 +52,7 @@ def record_user_activity() -> None:
             with open(file_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
-
+        
         with open(file_path, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([st.session_state.user_name, datetime.now().isoformat()])
@@ -67,7 +66,7 @@ def connect_to_gspread() -> gspread.Client:
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-
+    
     try:
         # Streamlit secrets에서 GCP 인증정보 가져오기
         creds_data = st.secrets.get("GCP_CREDENTIALS", {})
@@ -75,7 +74,7 @@ def connect_to_gspread() -> gspread.Client:
             creds_dict = json.loads(creds_data)
         else:
             creds_dict = dict(creds_data)
-
+        
         credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(credentials)
         return client
@@ -88,11 +87,10 @@ def load_data_from_google_sheet(spreadsheet_url_or_id: str, worksheet_name: str 
     """Google 스프레드시트에서 데이터를 로드합니다."""
     try:
         client = connect_to_gspread()
-
+        
         # URL에서 스프레드시트 ID 추출 또는 직접 ID 사용
         if "docs.google.com" in spreadsheet_url_or_id:
             # URL에서 ID 추출
-            import re
             match = re.search(r'/spreadsheets/d/([a-zA-Z0-9-_]+)', spreadsheet_url_or_id)
             if match:
                 spreadsheet_id = match.group(1)
@@ -101,22 +99,22 @@ def load_data_from_google_sheet(spreadsheet_url_or_id: str, worksheet_name: str 
                 return pd.DataFrame()
         else:
             spreadsheet_id = spreadsheet_url_or_id
-
+        
         # 스프레드시트 열기
         spreadsheet = client.open_by_key(spreadsheet_id)
-
+        
         # 워크시트 선택
         if worksheet_name:
             worksheet = spreadsheet.worksheet(worksheet_name)
         else:
             worksheet = spreadsheet.sheet1
-
+        
         # 데이터 가져오기
         data = worksheet.get_all_records()
         df = pd.DataFrame(data)
-
+        
         return df
-
+        
     except SpreadsheetNotFound:
         st.error(f"스프레드시트를 찾을 수 없습니다: {spreadsheet_url_or_id}")
         return pd.DataFrame()
@@ -132,15 +130,15 @@ def login_page() -> None:
     name_input = st.text_input("이름을 입력하세요")
     group_input = st.text_input("소속을 입력하세요 (관리자일 경우 '관리자' 또는 'admin')")
     password = st.text_input("암호를 입력하세요", type="password")
-
+    
     if st.button("로그인"):
         name = name_input.strip()
         group = group_input.strip()
         user_name = f"{name} ({group})" if group else name
-
+        
         st.session_state.user_name = user_name
         st.session_state.exam_name = None
-
+        
         if password == "admin" or group.lower() in ("admin", "관리자"):
             st.session_state.is_admin = True
             st.session_state.logged_in = True
@@ -150,7 +148,7 @@ def login_page() -> None:
         else:
             st.error("❌ 암호가 틀렸습니다.")
             return
-
+        
         # 로그인 시 기존 진행 상황 초기화
         st.session_state.skip_ids = set()
         st.session_state.low_ids = set()
@@ -160,35 +158,38 @@ def login_page() -> None:
         st.session_state.answered = False
         st.session_state.prev_selected_file = None
         st.session_state.prev_selected_chapter = None
-
+        
         st.rerun()
 
 def main_page() -> None:
     st.title("📘 공인중개사 OX 퀴즈")
     st.sidebar.header("📂 문제집 선택")
-
+    
     # Google Sheets URL 입력 방식
     st.sidebar.subheader("Google Sheets 연결")
-
+    
     # 옵션 1: URL 직접 입력
     sheets_url = st.sidebar.text_input(
         "Google Sheets URL을 입력하세요",
         placeholder="https://docs.google.com/spreadsheets/d/your-sheet-id/edit#gid=0",
         help="Google Sheets의 공유 링크를 입력하세요"
     )
-
-    # 옵션 2: 미리 정의된 목록에서 선택 (필요시 사용)
+    
+    # 옵션 2: 미리 정의된 목록에서 선택 - 실제 스프레드시트 ID로 업데이트
     predefined_sheets = {
-        "1차 민법": "your-actual-sheet-id-1",
-        "2차 중개사법": "your-actual-sheet-id-2", 
-        "2차 세법": "your-actual-sheet-id-3"
+        "문제집 1": "1Z9Oz04vuV7f5hbzrZ3iyn71RuB6bg0FEAL9_z10hyvs",
+        "문제집 2": "1LGlF9dUsuRsl3DVwIkHdm3XZzOCHojoYXbC2J_8RXuo",
+        "문제집 3": "1L1N6lasmt8rvVDbD3NqTJlvzIz1cRBSCqGI3Bvw6a4Y",
+        "문제집 4": "1DP-AuJ5AaMoMMDiXwMYTy4eVIpAOKnh2PXVVtgS2O_Y",
+        "문제집 5": "1prNQuzxdytOPzxpGKZw-aa76ud7RepkemIDlWpWCpMo",
+        "문제집 6": "1Lkz9_f7040gjryUxTRcbU-4NTNucBXijK9RMlL6y_QY"
     }
-
+    
     selected_predefined = st.sidebar.selectbox(
         "또는 미리 정의된 문제집에서 선택",
         ["선택안함"] + list(predefined_sheets.keys())
     )
-
+    
     # 사용할 스프레드시트 결정
     if sheets_url:
         spreadsheet_source = sheets_url
@@ -199,118 +200,139 @@ def main_page() -> None:
     else:
         st.sidebar.warning("Google Sheets URL을 입력하거나 미리 정의된 시트를 선택하세요.")
         return
-
+    
     # 워크시트 이름 입력
     worksheet_name = st.sidebar.text_input(
         "워크시트 이름 (비워두면 첫 번째 시트 사용)",
         placeholder="Sheet1"
     )
-
+    
     if st.sidebar.button("문제집 로드"):
         with st.spinner("문제집을 불러오는 중..."):
             df_source = load_data_from_google_sheet(spreadsheet_source, worksheet_name)
-
+            
             if not df_source.empty:
                 st.session_state.df = df_source
                 st.session_state.exam_name = sheet_name
                 st.success(f"✅ '{sheet_name}' 문제집이 성공적으로 로드되었습니다!")
                 st.write(f"총 {len(df_source)}개의 문제가 있습니다.")
-
+                
                 # 컬럼 정보 표시
                 st.write("문제집 구조:", df_source.columns.tolist())
-
+                
                 # 샘플 데이터 표시 
-                if len(df_source) > 0:
-                    st.write("첫 번째 문제 예시:")
-                    st.write(df_source.head(1))
+                with st.expander("첫 번째 문제 예시 보기"):
+                    if len(df_source) > 0:
+                        st.write(df_source.head(1))
             else:
                 st.error("❌ 문제집을 불러올 수 없습니다. URL과 워크시트 이름을 확인하세요.")
-
+    
     # 문제집이 로드된 경우에만 퀴즈 진행
     if st.session_state.df is not None and not st.session_state.df.empty:
         st.subheader("📚 퀴즈 시작")
-
+        
         # 필수 컬럼 확인
         required_cols = {"문제", "정답"}
         if not required_cols.issubset(st.session_state.df.columns):
             st.error(f"필수 컬럼이 없습니다: {required_cols - set(st.session_state.df.columns)}")
+            st.info("스프레드시트에 '문제'와 '정답' 컬럼이 있는지 확인하세요.")
             return
-
+        
         # 단원 선택 (있는 경우)
         if "단원명" in st.session_state.df.columns:
             chapters = ["전체 보기"] + sorted(st.session_state.df["단원명"].dropna().unique().tolist())
             selected_chapter = st.selectbox("단원 선택", chapters)
-
+            
             if selected_chapter != "전체 보기":
                 filtered_df = st.session_state.df[st.session_state.df["단원명"] == selected_chapter]
             else:
                 filtered_df = st.session_state.df
         else:
             filtered_df = st.session_state.df
-
+        
         if len(filtered_df) == 0:
             st.warning("선택한 조건에 맞는 문제가 없습니다.")
             return
-
+        
         # 랜덤 문제 선택
         if st.session_state.question is None:
             st.session_state.question = filtered_df.sample(1).iloc[0]
-
+        
         question = st.session_state.question
-
+        
         # 문제 표시
         st.write("---")
         if "단원명" in question:
             st.write(f"**단원:** {question.get('단원명', '')}")
-
+        
         if "문제번호" in question:
             try:
                 qnum_display = int(question["문제번호"])
             except:
                 qnum_display = question["문제번호"]
             st.write(f"**문제번호:** {qnum_display}")
-
+        
         st.write(f"**문제:** {question['문제']}")
-
+        
         # 답안 선택
         col1, col2, col3 = st.columns(3)
         user_answer = None
-
+        
         if col1.button("⭕ O", use_container_width=True):
             user_answer = "O"
         elif col2.button("❌ X", use_container_width=True):
             user_answer = "X"
         elif col3.button("⁉️ 모름", use_container_width=True):
             user_answer = "모름"
-
+        
         # 답안 처리
         if user_answer:
             correct = (user_answer == question["정답"])
-
+            
             if correct:
                 st.success("✅ 정답입니다!")
             else:
                 st.error(f"❌ 오답입니다. 정답은 '{question['정답']}'입니다.")
-
+            
             # 해설 표시 (있는 경우)
             if "해설" in question and pd.notna(question["해설"]) and question["해설"].strip():
                 st.info(f"💡 **해설:** {question['해설']}")
-
+            
             # 다음 문제 버튼
             if st.button("다음 문제", use_container_width=True):
                 st.session_state.question = filtered_df.sample(1).iloc[0]
                 st.rerun()
-
+                
+        # 통계 표시
+        st.sidebar.markdown("---")
+        st.sidebar.write(f"📊 현재 문제집: **{st.session_state.exam_name}**")
+        st.sidebar.write(f"📝 전체 문제 수: {len(st.session_state.df)}")
+        if "단원명" in st.session_state.df.columns and selected_chapter != "전체 보기":
+            st.sidebar.write(f"🎯 선택된 단원: {selected_chapter}")
+            st.sidebar.write(f"📘 단원 문제 수: {len(filtered_df)}")
+    
     else:
         st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
+        st.markdown("### 📋 사용 가이드")
+        st.markdown("""
+        1. **사이드바**에서 Google Sheets URL을 입력하거나 미리 정의된 문제집을 선택하세요
+        2. 워크시트 이름을 입력하세요 (비워두면 첫 번째 시트 사용)
+        3. **"문제집 로드"** 버튼을 클릭하세요
+        4. 문제집이 로드되면 퀴즈를 시작할 수 있습니다
+        
+        #### 📝 스프레드시트 형식 요구사항:
+        - **필수 컬럼**: `문제`, `정답`
+        - **선택 컬럼**: `단원명`, `문제번호`, `해설`
+        - **정답 형식**: "O" 또는 "X"
+        """)
 
 def run_app() -> None:
     init_session_state()
-
+    
     if not st.session_state.logged_in:
         login_page()
         return
-
+    
     main_page()
 
 if __name__ == "__main__":
