@@ -329,9 +329,6 @@ def main_page() -> None:
         st.info(st.session_state.sheet_log_status)
         st.session_state.sheet_log_status = None
 
-    # 이후 기존 코드 계속...
-
-
     predefined_sheets = {
         "1차 민법": "1Z9Oz04vuV7f5hbzrZ3iyn71RuB6bg0FEAL9_z10hyvs",
         "1차 학개론": "1LGlF9dUsuRsl3DVwIkHdm3XZzOCHojoYXbC2J_8RXuo",
@@ -367,58 +364,32 @@ def main_page() -> None:
         placeholder="Sheet1"
     )
 
-   if st.sidebar.button("문제집 로드"):
-    with st.spinner("문제집을 불러오는 중..."):
-        df_source = load_data_from_google_sheet(spreadsheet_source, worksheet_name)
-        if not df_source.empty:
-            st.session_state.df = df_source
-            st.session_state.exam_name = sheet_name
-            st.success(f"✅ '{sheet_name}' 문제집이 성공적으로 로드되었습니다!")
-            st.write(f"총 {len(df_source)}개의 문제가 있습니다.")
-            st.write("문제집 구조:", df_source.columns.tolist())
-            with st.expander("첫 번째 문제 예시 보기"):
-                if len(df_source) > 0:
-                    st.write(df_source.head(1))
-                else:
-                    st.error("❌ 문제집을 불러올 수 없습니다. URL과 워크시트 이름을 확인하세요.")
-            st.session_state.filtered_df = df_source.copy()
-            get_new_question()
-            return
-        else:
-            st.error("❌ 문제집 데이터가 비어있습니다.")
-            st.session_state.filtered_df = pd.DataFrame()
-            return
+    if st.sidebar.button("문제집 로드"):
+        with st.spinner("문제집을 불러오는 중..."):
+            df_source = load_data_from_google_sheet(spreadsheet_source, worksheet_name)
+            if not df_source.empty:
+                st.session_state.df = df_source
+                st.session_state.exam_name = sheet_name
+                st.success(f"✅ '{sheet_name}' 문제집이 성공적으로 로드되었습니다!")
+                st.write(f"총 {len(df_source)}개의 문제가 있습니다.")
+                st.write("문제집 구조:", df_source.columns.tolist())
+                with st.expander("첫 번째 문제 예시 보기"):
+                    if len(df_source) > 0:
+                        st.write(df_source.head(1))
+                    else:
+                        st.error("❌ 문제집을 불러올 수 없습니다. URL과 워크시트 이름을 확인하세요.")
+                st.session_state.filtered_df = df_source.copy()
+                get_new_question()
+                return
+            else:
+                st.error("❌ 문제집 데이터가 비어있습니다.")
+                st.session_state.filtered_df = pd.DataFrame()
+                return
 
+    if st.session_state.filtered_df is None or st.session_state.filtered_df.empty:
+        st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
+        return
 
-# 문제 출제 전 필터링 및 문제 초기화 체크
-if st.session_state.filtered_df is None or st.session_state.filtered_df.empty:
-    st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
-    return
-
-# 단원 필터링
-if "단원명" in st.session_state.df.columns:
-    chapters = ["전체 보기"] + sorted(st.session_state.df["단원명"].dropna().unique().tolist())
-    selected_chapter = st.selectbox("단원 선택", chapters)
-    if selected_chapter != "전체 보기":
-        filtered_df = st.session_state.df[st.session_state.df["단원명"] == selected_chapter]
-    else:
-        filtered_df = st.session_state.df.copy()
-else:
-    filtered_df = st.session_state.df.copy()
-
-st.session_state.filtered_df = filtered_df.reset_index(drop=True)
-
-# 문제 리스트가 비면 메시지 출력
-if filtered_df.empty:
-    st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
-    return
-
-# 문제 랜덤 선택 (최초 문제 없음 시)
-if st.session_state.question is None:
-    get_new_question()
-
-
-    # 단원 필터링 UI 및 적용
     if "단원명" in st.session_state.df.columns:
         chapters = ["전체 보기"] + sorted(st.session_state.df["단원명"].dropna().unique().tolist())
         selected_chapter = st.selectbox("단원 선택", chapters)
@@ -505,7 +476,6 @@ if st.session_state.question is None:
         }
         if st.session_state.user_progress_file:
             save_user_progress(st.session_state.user_progress_file, data_to_save)
-            # log_to_sheet(data_to_save)
         st.session_state.last_correct = correct
         st.session_state.last_qnum = str(qnum_display)
 
