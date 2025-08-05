@@ -227,6 +227,13 @@ def show_wrong_list_table():
         wrong_df[["날짜", "문제번호", "단원명", "문제", "선택", "정답", "해설"]]
     )
 
+def show_accuracy():
+    if st.session_state.total > 0:
+        accuracy = (st.session_state.score / st.session_state.total) * 100
+        st.sidebar.markdown(f"🎯 문제집별 정답률: {accuracy:.2f}%")
+    else:
+        st.sidebar.markdown("🎯 문제집별 정답률: 정보 없음")
+
 def login_page() -> None:
     st.title("🔐 사용자 로그인")
     name_input = st.text_input("이름을 입력하세요")
@@ -255,16 +262,14 @@ def login_page() -> None:
         st.session_state.answered = False
         st.session_state.prev_selected_file = None
         st.session_state.prev_selected_chapter = None
-        # st.experimental_rerun() 호환 문제 수정
+        # 재실행 시도
         try:
             st.experimental_rerun()
         except AttributeError:
-            # st.experimental_rerun()이 없으면 다음 방법 시도
             try:
                 st.session_state["rerun"] = True
                 st.experimental_rerun()
             except Exception:
-                # 더 이상 방법이 없으면 그냥 통과
                 pass
 
 def load_and_filter_data(df_loaded: pd.DataFrame, selected_chapter: str, skip_ids: set, low_ids: set) -> None:
@@ -363,6 +368,8 @@ def main_page() -> None:
                     else:
                         st.error("❌ 문제집을 불러올 수 없습니다. URL과 워크시트 이름을 확인하세요.")
 
+    show_accuracy()  # 추가: 정답률 표시
+
     if st.session_state.df is not None and not st.session_state.df.empty:
         st.subheader("📚 퀴즈 시작")
         required_cols = {"문제", "정답"}
@@ -445,6 +452,7 @@ def main_page() -> None:
             }
             if st.session_state.user_progress_file:
                 save_user_progress(st.session_state.user_progress_file, data_to_save)
+                # 로그 구글시트 기록 가능
                 # log_to_sheet(data_to_save)
             st.session_state.last_correct = correct
             st.session_state.last_qnum = str(qnum_display)
@@ -455,6 +463,16 @@ def main_page() -> None:
                 st.info(f"📘 해설: {last_q['해설']}")
 
             rating_col1, rating_col2, rating_col3 = st.columns(3)
+
+            def rerun_safely():
+                try:
+                    st.experimental_rerun()
+                except AttributeError:
+                    try:
+                        st.session_state["rerun"] = True
+                        st.experimental_rerun()
+                    except:
+                        pass
 
             if rating_col1.button("❌ 다시 보지 않기"):
                 if st.session_state.user_progress_file:
@@ -467,13 +485,10 @@ def main_page() -> None:
                     "rating": "skip",
                     "exam_name": st.session_state.exam_name,
                 })
-                st.session_state.df = st.session_state.df[st.session_state.df["문제번호"].astype(str) != st.session_state.last_qnum]
+                st.session_state.df = st.session_state.df[st.session_state.df["문제번호"].astype(str) != st.session_state.last_qnum].reset_index(drop=True)
                 get_new_question()
                 st.session_state.answered = False
-                try:
-                    st.experimental_rerun()
-                except AttributeError:
-                    pass
+                rerun_safely()
 
             if rating_col2.button("📘 이해 50~90%"):
                 if st.session_state.user_progress_file:
@@ -488,10 +503,7 @@ def main_page() -> None:
                 })
                 get_new_question()
                 st.session_state.answered = False
-                try:
-                    st.experimental_rerun()
-                except AttributeError:
-                    pass
+                rerun_safely()
 
             if rating_col3.button("🔄 이해 50% 미만"):
                 if st.session_state.user_progress_file:
@@ -506,10 +518,7 @@ def main_page() -> None:
                 })
                 get_new_question()
                 st.session_state.answered = False
-                try:
-                    st.experimental_rerun()
-                except AttributeError:
-                    pass
+                rerun_safely()
 
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
