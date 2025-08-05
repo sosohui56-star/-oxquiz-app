@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import csv
 import re
 import json
@@ -9,14 +9,12 @@ from google.oauth2.service_account import Credentials
 import gspread
 from gspread.exceptions import SpreadsheetNotFound, WorksheetNotFound
 
-# 사용자 데이터 저장 디렉토리 생성
 USER_DATA_DIR = "user_data"
 os.makedirs(USER_DATA_DIR, exist_ok=True)
 
 def get_safe_filename(name: str) -> str:
     return re.sub(r"[^\w]", "_", name)
 
-# 세션 상태 초기화
 def init_session_state() -> None:
     defaults = {
         "logged_in": False,
@@ -25,49 +23,22 @@ def init_session_state() -> None:
         "score": 0,
         "total": 0,
         "answered": False,
-        "question": None,
-        "last_question": None,
+        "question_index": 0,  # 현재 문제 인덱스
         "df": None,
         "filtered_df": None,
-        "prev_selected_file": None,
-        "prev_selected_chapter": None,
         "is_admin": False,
-        "last_correct": None,
-        "last_qnum": None,
-        "sheet_log_status": None,
-        "skip_ids": set(),
-        "low_ids": set(),
         "user_progress_file": None,
         "exam_name": None,
-        "selected_gsheet_name": None,
-        "selected_worksheet_name": None,
-        "need_rerun": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
-# 로그 기록 함수
-def record_user_activity() -> None:
-    file_path = "progress_log.csv"
-    header = ["user_name", "timestamp"]
-    try:
-        if not os.path.exists(file_path):
-            with open(file_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(header)
-        with open(file_path, "a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([st.session_state.user_name, datetime.now().isoformat()])
-    except Exception as e:
-        st.warning(f"기록 파일에 저장하는 중 오류가 발생했습니다: {e}")
-
-# 구글 스프레드시트 연결
 def connect_to_gspread() -> gspread.Client:
     scope = [
         "https://spreadsheets.google.com/feeds",
         "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
+        "https://www.googleapis.com/auth/drive",
     ]
     try:
         creds_dict = st.secrets["GCP_CREDENTIALS"]
@@ -79,33 +50,6 @@ def connect_to_gspread() -> gspread.Client:
     except Exception as e:
         st.error(f"Google Sheets 연결 오류: {e}")
         st.stop()
-
-def connect_to_sheet() -> gspread.Worksheet:
-    client = connect_to_gspread()
-    try:
-        sheet = client.open("oxquiz_progress_log").worksheet("시트1")
-        return sheet
-    except Exception as e:
-        st.error(f"진행 로그 시트를 열 수 없습니다: {e}")
-        st.stop()
-
-def log_to_sheet(data: dict):
-    row = [
-        str(data.get("timestamp", "")),
-        str(data.get("user_name", "")),
-        str(data.get("question_id", "")),
-        str(data.get("correct", "")),
-        str(data.get("rating", "")),
-        str(data.get("exam_name", ""))
-    ]
-    try:
-        sheet = connect_to_sheet()
-        sheet.append_row(row)
-        st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
-        st.info("✅ 구글 시트에 기록 성공!")
-    except Exception as e:
-        st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
-        st.error(f"📛 구글 시트 기록 실패: {e}")
 
 def load_data_from_google_sheet(spreadsheet_url_or_id: str, worksheet_name: str = None) -> pd.DataFrame:
     try:
@@ -127,36 +71,16 @@ def load_data_from_google_sheet(spreadsheet_url_or_id: str, worksheet_name: str 
         data = worksheet.get_all_records()
         df = pd.DataFrame(data)
         return df
-    except SpreadsheetNotFound:
-        st.error(f"스프레드시트를 찾을 수 없습니다: {spreadsheet_url_or_id}")
-        return pd.DataFrame()
-    except WorksheetNotFound:
-        st.error(f"워크시트를 찾을 수 없습니다: {worksheet_name}")
-        return pd.DataFrame()
     except Exception as e:
         st.error(f"Google 스프레드시트에서 데이터를 읽는 중 오류가 발생했습니다: {e}")
         return pd.DataFrame()
 
-def get_new_question() -> None:
+def get_question_by_index(index: int):
     df = st.session_state.filtered_df
-    if df is not None and not df.empty:
-        st.session_state.question = df.sample(1).iloc[0]
-    else:
-        st.session_state.question = None
+    if df is None or df.empty or index < 0 or index >= len(df):
+        return None
+    return df.iloc[index]
 
-def rerun_if_needed():
-    if st.session_state.get("need_rerun", False):
-        st.session_state.need_rerun = False
-        try:
-            st.experimental_rerun()
-        except AttributeError:
-            try:
-                st.session_state["rerun"] = True
-                st.experimental_rerun()
-            except Exception:
-                pass
-
-# 로그인 페이지
 def login_page() -> None:
     st.title("🔐 사용자 로그인")
     name_input = st.text_input("이름을 입력하세요")
@@ -177,26 +101,21 @@ def login_page() -> None:
         else:
             st.error("❌ 암호가 틀렸습니다.")
             return
-        st.session_state.skip_ids = set()
-        st.session_state.low_ids = set()
-        st.session_state.user_progress_file = None
-        st.session_state.df = None
         st.session_state.filtered_df = None
-        st.session_state.question = None
-        st.session_state.answered = False
-        st.session_state.prev_selected_file = None
-        st.session_state.prev_selected_chapter = None
-        st.session_state.need_rerun = True
+        st.session_state.question_index = 0
 
-def main_page() -> None:
-    rerun_if_needed()
+def record_user_activity():
+    # 간략하게 기록 예시(진행 구현에 맞게 확장 가능)
+    try:
+        with open("progress_log.csv", "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([st.session_state.user_name, datetime.now().isoformat()])
+    except Exception:
+        pass
 
+def main_page():
     st.title("📘 공인중개사 OX 퀴즈")
     st.sidebar.header("📂 문제집 선택")
-
-    if st.session_state.sheet_log_status:
-        st.info(st.session_state.sheet_log_status)
-        st.session_state.sheet_log_status = None
 
     predefined_sheets = {
         "1차 민법": "1Z9Oz04vuV7f5hbzrZ3iyn71RuB6bg0FEAL9_z10hyvs",
@@ -207,12 +126,8 @@ def main_page() -> None:
         "2차 중개사법": "1Lkz9_f7040gjryUxTRcbU-4NTNucBXijK9RMlL6y_QY"
     }
 
-    sheets_url = st.sidebar.text_input(
-        "Google Sheets URL을 입력하세요", help="Google Sheets의 공유 링크를 입력하세요"
-    )
-    selected_predefined = st.sidebar.selectbox(
-        "또는 미리 정의된 문제집에서 선택", ["선택안함"] + list(predefined_sheets.keys())
-    )
+    sheets_url = st.sidebar.text_input("Google Sheets URL을 입력하세요")
+    selected_predefined = st.sidebar.selectbox("또는 미리 정의된 문제집에서 선택", ["선택안함"] + list(predefined_sheets.keys()))
 
     if sheets_url:
         spreadsheet_source = sheets_url
@@ -222,217 +137,128 @@ def main_page() -> None:
         sheet_name = selected_predefined
     else:
         st.sidebar.warning("Google Sheets URL을 입력하거나 미리 정의된 시트를 선택하세요.")
-        st.session_state.filtered_df = pd.DataFrame()
+        st.session_state.filtered_df = None
         return
 
-    worksheet_name = st.sidebar.text_input(
-        "워크시트 이름 (비워두면 첫 번째 시트 사용)", placeholder="Sheet1"
-    )
+    worksheet_name = st.sidebar.text_input("워크시트 이름 (빈칸이면 첫 번째 시트)", placeholder="Sheet1")
 
     if st.sidebar.button("문제집 로드"):
         with st.spinner("문제집을 불러오는 중..."):
-            df_source = load_data_from_google_sheet(spreadsheet_source, worksheet_name)
-            if not df_source.empty:
-                st.session_state.df = df_source
-                st.session_state.exam_name = sheet_name
-                st.success(f"✅ '{sheet_name}' 문제집이 성공적으로 로드되었습니다!")
-                st.write(f"총 {len(df_source)}개의 문제가 있습니다.")
-                st.write("문제집 구조:", df_source.columns.tolist())
-                with st.expander("첫 번째 문제 예시 보기"):
-                    st.write(df_source.head(1))
-                st.session_state.filtered_df = df_source.copy()
-                st.session_state.question = None
-                st.session_state.need_rerun = True
-            else:
-                st.error("❌ 문제집 데이터가 비어있습니다.")
-                st.session_state.filtered_df = pd.DataFrame()
-                st.session_state.need_rerun = False
+            df = load_data_from_google_sheet(spreadsheet_source, worksheet_name)
+            if df.empty:
+                st.error("데이터가 없습니다.")
+                st.session_state.filtered_df = None
+                return
+            st.session_state.df = df
+            st.session_state.exam_name = sheet_name
+            st.session_state.filtered_df = df
+            st.session_state.question_index = 0
 
-    if st.session_state.filtered_df is None or st.session_state.filtered_df.empty:
-        st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
+    if st.session_state.filtered_df is None:
+        st.info("문제집을 먼저 로드해주세요.")
         return
 
     # 단원 필터링
     if "단원명" in st.session_state.df.columns:
-        chapters = ["전체 보기"] + sorted(st.session_state.df["단원명"].dropna().unique().tolist())
+        chapters = ["전체 보기"] + sorted(st.session_state.df["단원명"].dropna().unique())
         selected_chapter = st.selectbox("단원 선택", chapters)
         if selected_chapter != "전체 보기":
-            filtered_df = st.session_state.df[st.session_state.df["단원명"] == selected_chapter]
+            filtered = st.session_state.df[st.session_state.df["단원명"] == selected_chapter]
+            st.session_state.filtered_df = filtered.reset_index(drop=True)
+            st.session_state.question_index = 0
         else:
-            filtered_df = st.session_state.df.copy()
+            st.session_state.filtered_df = st.session_state.df.reset_index(drop=True)
+            st.session_state.question_index = 0
     else:
-        filtered_df = st.session_state.df.copy()
+        if st.session_state.filtered_df is None:
+            st.session_state.filtered_df = st.session_state.df.reset_index(drop=True)
+            st.session_state.question_index = 0
 
-    st.session_state.filtered_df = filtered_df.reset_index(drop=True)
+    df_filtered = st.session_state.filtered_df
+    qidx = st.session_state.question_index
 
-    if filtered_df.empty:
-        st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
+    if len(df_filtered) == 0:
+        st.warning("조건에 맞는 문제가 없습니다.")
         return
 
-    st.subheader("📚 퀴즈 시작")
-    required_cols = {"문제", "정답"}
-    if not required_cols.issubset(st.session_state.filtered_df.columns):
-        st.error(f"필수 컬럼이 없습니다: {required_cols - set(st.session_state.filtered_df.columns)}")
-        st.info("스프레드시트에 '문제'와 '정답' 컬럼이 있는지 확인하세요.")
-        return
-
-    if st.session_state.question is None:
-        get_new_question()
-
-    question = st.session_state.question
+    question = get_question_by_index(qidx)
     if question is None:
-        st.warning("문제가 없습니다.")
+        st.warning("문제를 불러올 수 없습니다.")
         return
 
-    st.write(f"**단원:** {question.get('단원명', '') if '단원명' in question else ''}")
-    qnum_display = question.get("문제번호", "")
-    try:
-        qnum_display = int(qnum_display)
-    except Exception:
-        pass
-    st.write(f"**문제번호:** {qnum_display}")
-    st.write(f"**문제:** {question['문제']}")
+    st.write(f"**단원:** {question.get('단원명', '')}")
+    st.write(f"**문제번호:** {question.get('문제번호', '')}")
+    st.write(f"**문제:** {question.get('문제', '')}")
 
     col1, col2, col3 = st.columns(3)
-    user_answer = None
-    if col1.button("⭕ O", use_container_width=True):
-        user_answer = "O"
-    elif col2.button("❌ X", use_container_width=True):
-        user_answer = "X"
-    elif col3.button("⁉️ 모름", use_container_width=True):
-        user_answer = "모름"
+    answer = None
+    if col1.button("⭕ O", key="O"):
+        answer = "O"
+    if col2.button("❌ X", key="X"):
+        answer = "X"
+    if col3.button("⁉️ 모름", key="Unknown"):
+        answer = "모름"
 
-    if user_answer:
+    if answer is not None:
         st.session_state.total += 1
-        st.session_state.answered = True
-        st.session_state.last_question = question.copy()
-        record_user_activity()
-        correct = (user_answer == question["정답"])
+        correct = (answer == question.get('정답', ''))
         if correct:
             st.session_state.score += 1
             st.success("✅ 정답입니다!")
         else:
+            st.error(f"❌ 오답입니다. 정답은 {question.get('정답', '')}입니다.")
             st.session_state.wrong_list.append({
-                "이름": st.session_state.user_name,
                 "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "문제번호": qnum_display,
+                "문제번호": question.get("문제번호", ""),
                 "단원명": question.get("단원명", ""),
-                "문제": question["문제"],
-                "정답": question["정답"],
-                "선택": user_answer,
-                "해설": question.get("해설", ""),
+                "문제": question.get("문제", ""),
+                "정답": question.get("정답", ""),
+                "선택": answer,
+                "해설": question.get("해설", "")
             })
-            st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
+        record_user_activity()
 
-        data_to_save = {
-            "timestamp": datetime.now().isoformat(),
-            "user_name": st.session_state.user_name,
-            "question_id": str(qnum_display),
-            "correct": correct,
-            "rating": "",
-            "chapter": question.get("단원명", ""),
-            "question": question["문제"],
-            "correct_answer": question["정답"],
-            "answer": user_answer,
-            "explanation": question.get("해설", ""),
-        }
-        if st.session_state.user_progress_file:
-            save_user_progress(st.session_state.user_progress_file, data_to_save)
-        st.session_state.last_correct = correct
-        st.session_state.last_qnum = str(qnum_display)
+    # 이전/다음 버튼 배치
+    col_prev, col_next = st.columns(2)
+    if col_prev.button("⬅ 이전 문제"):
+        if st.session_state.question_index > 0:
+            st.session_state.question_index -= 1
+            st.experimental_rerun()
+    if col_next.button("다음 문제 ➡"):
+        if st.session_state.question_index < len(df_filtered) - 1:
+            st.session_state.question_index += 1
+            st.experimental_rerun()
 
-    if st.session_state.answered and st.session_state.last_question is not None:
-        last_q = st.session_state.last_question
-        if last_q.get("해설"):
-            st.info(f"📘 해설: {last_q['해설']}")
+    # 사이드바 상태 출력
+    st.sidebar.write(f"👤 사용자: {st.session_state.user_name}")
+    st.sidebar.write(f"✅ 정답 수: {st.session_state.score}")
+    st.sidebar.write(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
+    st.sidebar.write(f"📊 총 풀 문제: {len(df_filtered)}")
+    st.sidebar.write(f"현재 문제: {st.session_state.question_index + 1} / {len(df_filtered)}")
 
-        rating_col1, rating_col2, rating_col3 = st.columns(3)
-
-        def set_rerun_flag():
-            st.session_state.answered = False
-            st.session_state.need_rerun = True
-
-        if rating_col1.button("❌ 다시 보지 않기"):
-            if st.session_state.user_progress_file:
-                update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, "skip")
-            log_to_sheet({
-                "timestamp": datetime.now().isoformat(),
-                "user_name": st.session_state.user_name,
-                "question_id": st.session_state.last_qnum,
-                "correct": st.session_state.last_correct,
-                "rating": "skip",
-                "exam_name": st.session_state.exam_name,
-            })
-            st.session_state.filtered_df = st.session_state.filtered_df[
-                st.session_state.filtered_df["문제번호"].astype(str) != st.session_state.last_qnum
-            ].reset_index(drop=True)
-            get_new_question()
-            set_rerun_flag()
-
-        if rating_col2.button("📘 이해 50~90%"):
-            if st.session_state.user_progress_file:
-                update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, "mid")
-            log_to_sheet({
-                "timestamp": datetime.now().isoformat(),
-                "user_name": st.session_state.user_name,
-                "question_id": st.session_state.last_qnum,
-                "correct": st.session_state.last_correct,
-                "rating": "mid",
-                "exam_name": st.session_state.exam_name,
-            })
-            get_new_question()
-            set_rerun_flag()
-
-        if rating_col3.button("🔄 이해 50% 미만"):
-            if st.session_state.user_progress_file:
-                update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, "low")
-            log_to_sheet({
-                "timestamp": datetime.now().isoformat(),
-                "user_name": st.session_state.user_name,
-                "question_id": st.session_state.last_qnum,
-                "correct": st.session_state.last_correct,
-                "rating": "low",
-                "exam_name": st.session_state.exam_name,
-            })
-            get_new_question()
-            set_rerun_flag()
-
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
-    st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
-    st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
-    st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
-    remaining_count = st.session_state.filtered_df.shape[0] if st.session_state.filtered_df is not None else 0
-    st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
-
-    if st.sidebar.button("📂 오답 엑셀로 저장"):
-        save_wrong_answers_to_excel()
-    if st.sidebar.button("📈 주간 랭킹 보기"):
-        display_weekly_ranking()
-    if st.sidebar.button("❔ 오답 목록 보기"):
-        show_wrong_list_table()
-
-    st.markdown("### 📋 사용 가이드")
-    st.markdown(
-        """
-    1. **사이드바**에서 Google Sheets URL을 입력하거나 미리 정의된 문제집을 선택하세요
-    2. 워크시트 이름을 입력하세요 (비워두면 첫 번째 시트 사용)
-    3. **\"문제집 로드\"** 버튼을 클릭하세요
-    4. 문제집이 로드되면 퀴즈를 시작할 수 있습니다
-    #### 📝 스프레드시트 형식 요구사항:
-    - 필수 컬럼: `문제`, `정답`
-    - 선택 컬럼: `단원명`, `문제번호`, `해설`
-    - 정답 형식: "O" 또는 "X"
-    """
-    )
+    if st.sidebar.button("오답 다운로드 (엑셀)"):
+        if st.session_state.wrong_list:
+            df_wrong = pd.DataFrame(st.session_state.wrong_list)
+            filename = f"{get_safe_filename(st.session_state.user_name)}_wrong.xlsx"
+            df_wrong.to_excel(filename, index=False)
+            with open(filename, "rb") as f:
+                btn = st.sidebar.download_button(
+                    label="오답파일 다운로드",
+                    data=f,
+                    file_name=filename,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        else:
+            st.sidebar.info("오답이 없습니다.")
 
 def run_app() -> None:
     init_session_state()
     rerun_if_needed()
+
     if not st.session_state.logged_in:
         login_page()
         return
     main_page()
 
-if __name__ == "__main__":
+if __name__=="__main__":
     run_app()
