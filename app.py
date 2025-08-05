@@ -9,12 +9,14 @@ from google.oauth2.service_account import Credentials
 import gspread
 from gspread.exceptions import SpreadsheetNotFound, WorksheetNotFound
 
+# 사용자 데이터 저장 디렉토리 생성
 USER_DATA_DIR = "user_data"
 os.makedirs(USER_DATA_DIR, exist_ok=True)
 
 def get_safe_filename(name: str) -> str:
     return re.sub(r"[^\w]", "_", name)
 
+# 세션 상태 초기화
 def init_session_state() -> None:
     defaults = {
         "logged_in": False,
@@ -45,18 +47,22 @@ def init_session_state() -> None:
         if k not in st.session_state:
             st.session_state[k] = v
 
-def rerun_if_needed():
-    if st.session_state.get("need_rerun", False):
-        st.session_state["need_rerun"] = False
-        try:
-            st.experimental_rerun()
-        except AttributeError:
-            try:
-                st.session_state["rerun"] = True
-                st.experimental_rerun()
-            except Exception:
-                pass
+# 로그 기록 함수
+def record_user_activity() -> None:
+    file_path = "progress_log.csv"
+    header = ["user_name", "timestamp"]
+    try:
+        if not os.path.exists(file_path):
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+        with open(file_path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([st.session_state.user_name, datetime.now().isoformat()])
+    except Exception as e:
+        st.warning(f"기록 파일에 저장하는 중 오류가 발생했습니다: {e}")
 
+# 구글 스프레드시트 연결
 def connect_to_gspread() -> gspread.Client:
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -73,6 +79,33 @@ def connect_to_gspread() -> gspread.Client:
     except Exception as e:
         st.error(f"Google Sheets 연결 오류: {e}")
         st.stop()
+
+def connect_to_sheet() -> gspread.Worksheet:
+    client = connect_to_gspread()
+    try:
+        sheet = client.open("oxquiz_progress_log").worksheet("시트1")
+        return sheet
+    except Exception as e:
+        st.error(f"진행 로그 시트를 열 수 없습니다: {e}")
+        st.stop()
+
+def log_to_sheet(data: dict):
+    row = [
+        str(data.get("timestamp", "")),
+        str(data.get("user_name", "")),
+        str(data.get("question_id", "")),
+        str(data.get("correct", "")),
+        str(data.get("rating", "")),
+        str(data.get("exam_name", ""))
+    ]
+    try:
+        sheet = connect_to_sheet()
+        sheet.append_row(row)
+        st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
+        st.info("✅ 구글 시트에 기록 성공!")
+    except Exception as e:
+        st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
+        st.error(f"📛 구글 시트 기록 실패: {e}")
 
 def load_data_from_google_sheet(spreadsheet_url_or_id: str, worksheet_name: str = None) -> pd.DataFrame:
     try:
@@ -92,25 +125,75 @@ def load_data_from_google_sheet(spreadsheet_url_or_id: str, worksheet_name: str 
         else:
             worksheet = spreadsheet.sheet1
         data = worksheet.get_all_records()
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+        return df
+    except SpreadsheetNotFound:
+        st.error(f"스프레드시트를 찾을 수 없습니다: {spreadsheet_url_or_id}")
+        return pd.DataFrame()
+    except WorksheetNotFound:
+        st.error(f"워크시트를 찾을 수 없습니다: {worksheet_name}")
+        return pd.DataFrame()
     except Exception as e:
-        st.error(f"Google Sheets 데이터 로드 오류: {e}")
+        st.error(f"Google 스프레드시트에서 데이터를 읽는 중 오류가 발생했습니다: {e}")
         return pd.DataFrame()
 
-def get_new_question():
+def get_new_question() -> None:
     df = st.session_state.filtered_df
     if df is not None and not df.empty:
         st.session_state.question = df.sample(1).iloc[0]
     else:
         st.session_state.question = None
 
-def main_page():
+def rerun_if_needed():
+    if st.session_state.get("need_rerun", False):
+        st.session_state.need_rerun = False
+        try:
+            st.experimental_rerun()
+        except AttributeError:
+            try:
+                st.session_state["rerun"] = True
+                st.experimental_rerun()
+            except Exception:
+                pass
+
+# 로그인 페이지
+def login_page() -> None:
+    st.title("🔐 사용자 로그인")
+    name_input = st.text_input("이름을 입력하세요")
+    group_input = st.text_input("소속을 입력하세요 (관리자일 경우 '관리자' 또는 'admin')")
+    password = st.text_input("암호를 입력하세요", type="password")
+    if st.button("로그인"):
+        name = name_input.strip()
+        group = group_input.strip()
+        user_name = f"{name} ({group})" if group else name
+        st.session_state.user_name = user_name
+        st.session_state.exam_name = None
+        if password == "admin" or group.lower() in ("admin", "관리자"):
+            st.session_state.is_admin = True
+            st.session_state.logged_in = True
+        elif password == "1234":
+            st.session_state.is_admin = False
+            st.session_state.logged_in = True
+        else:
+            st.error("❌ 암호가 틀렸습니다.")
+            return
+        st.session_state.skip_ids = set()
+        st.session_state.low_ids = set()
+        st.session_state.user_progress_file = None
+        st.session_state.df = None
+        st.session_state.filtered_df = None
+        st.session_state.question = None
+        st.session_state.answered = False
+        st.session_state.prev_selected_file = None
+        st.session_state.prev_selected_chapter = None
+        st.session_state.need_rerun = True
+
+def main_page() -> None:
     rerun_if_needed()
 
     st.title("📘 공인중개사 OX 퀴즈")
     st.sidebar.header("📂 문제집 선택")
 
-    # Show log status if exists
     if st.session_state.sheet_log_status:
         st.info(st.session_state.sheet_log_status)
         st.session_state.sheet_log_status = None
@@ -124,8 +207,12 @@ def main_page():
         "2차 중개사법": "1Lkz9_f7040gjryUxTRcbU-4NTNucBXijK9RMlL6y_QY"
     }
 
-    sheets_url = st.sidebar.text_input("Google Sheets URL을 입력하세요", help="Google Sheets의 공유 링크를 입력하세요")
-    selected_predefined = st.sidebar.selectbox("또는 미리 정의된 문제집에서 선택", ["선택안함"] + list(predefined_sheets.keys()))
+    sheets_url = st.sidebar.text_input(
+        "Google Sheets URL을 입력하세요", help="Google Sheets의 공유 링크를 입력하세요"
+    )
+    selected_predefined = st.sidebar.selectbox(
+        "또는 미리 정의된 문제집에서 선택", ["선택안함"] + list(predefined_sheets.keys())
+    )
 
     if sheets_url:
         spreadsheet_source = sheets_url
@@ -138,7 +225,9 @@ def main_page():
         st.session_state.filtered_df = pd.DataFrame()
         return
 
-    worksheet_name = st.sidebar.text_input("워크시트 이름 (비워두면 첫 번째 시트 사용)", placeholder="Sheet1")
+    worksheet_name = st.sidebar.text_input(
+        "워크시트 이름 (비워두면 첫 번째 시트 사용)", placeholder="Sheet1"
+    )
 
     if st.sidebar.button("문제집 로드"):
         with st.spinner("문제집을 불러오는 중..."):
@@ -159,7 +248,6 @@ def main_page():
                 st.session_state.filtered_df = pd.DataFrame()
                 st.session_state.need_rerun = False
 
-    # 필터링 문제 없으면 안내
     if st.session_state.filtered_df is None or st.session_state.filtered_df.empty:
         st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
         return
@@ -181,7 +269,13 @@ def main_page():
         st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
         return
 
-    # 문제 뽑기
+    st.subheader("📚 퀴즈 시작")
+    required_cols = {"문제", "정답"}
+    if not required_cols.issubset(st.session_state.filtered_df.columns):
+        st.error(f"필수 컬럼이 없습니다: {required_cols - set(st.session_state.filtered_df.columns)}")
+        st.info("스프레드시트에 '문제'와 '정답' 컬럼이 있는지 확인하세요.")
+        return
+
     if st.session_state.question is None:
         get_new_question()
 
@@ -190,16 +284,15 @@ def main_page():
         st.warning("문제가 없습니다.")
         return
 
-    # 문제 출력
     st.write(f"**단원:** {question.get('단원명', '') if '단원명' in question else ''}")
+    qnum_display = question.get("문제번호", "")
     try:
-        qnum_display = int(question.get("문제번호", ""))
+        qnum_display = int(qnum_display)
     except Exception:
-        qnum_display = question.get("문제번호", "")
+        pass
     st.write(f"**문제번호:** {qnum_display}")
     st.write(f"**문제:** {question['문제']}")
 
-    # 답변 버튼
     col1, col2, col3 = st.columns(3)
     user_answer = None
     if col1.button("⭕ O", use_container_width=True):
@@ -248,7 +341,6 @@ def main_page():
         st.session_state.last_correct = correct
         st.session_state.last_qnum = str(qnum_display)
 
-    # 이해도 버튼 및 다음 문제 처리
     if st.session_state.answered and st.session_state.last_question is not None:
         last_q = st.session_state.last_question
         if last_q.get("해설"):
@@ -305,15 +397,12 @@ def main_page():
             get_new_question()
             set_rerun_flag()
 
-    # 사이드바 상태 표시
     st.sidebar.markdown("---")
     st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
     st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
     st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
     st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
-    remaining_count = (
-        st.session_state.filtered_df.shape[0] if st.session_state.filtered_df is not None else 0
-    )
+    remaining_count = st.session_state.filtered_df.shape[0] if st.session_state.filtered_df is not None else 0
     st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
 
     if st.sidebar.button("📂 오답 엑셀로 저장"):
@@ -324,7 +413,8 @@ def main_page():
         show_wrong_list_table()
 
     st.markdown("### 📋 사용 가이드")
-    st.markdown("""
+    st.markdown(
+        """
     1. **사이드바**에서 Google Sheets URL을 입력하거나 미리 정의된 문제집을 선택하세요
     2. 워크시트 이름을 입력하세요 (비워두면 첫 번째 시트 사용)
     3. **\"문제집 로드\"** 버튼을 클릭하세요
@@ -333,12 +423,12 @@ def main_page():
     - 필수 컬럼: `문제`, `정답`
     - 선택 컬럼: `단원명`, `문제번호`, `해설`
     - 정답 형식: "O" 또는 "X"
-    """)
+    """
+    )
 
 def run_app() -> None:
     init_session_state()
     rerun_if_needed()
-
     if not st.session_state.logged_in:
         login_page()
         return
