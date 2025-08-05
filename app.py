@@ -367,7 +367,7 @@ def main_page() -> None:
         placeholder="Sheet1"
     )
 
-    if st.sidebar.button("문제집 로드"):
+   if st.sidebar.button("문제집 로드"):
     with st.spinner("문제집을 불러오는 중..."):
         df_source = load_data_from_google_sheet(spreadsheet_source, worksheet_name)
         if not df_source.empty:
@@ -381,7 +381,6 @@ def main_page() -> None:
                     st.write(df_source.head(1))
                 else:
                     st.error("❌ 문제집을 불러올 수 없습니다. URL과 워크시트 이름을 확인하세요.")
-            # 필터링 초기화 및 문제 초기화
             st.session_state.filtered_df = df_source.copy()
             get_new_question()
             return
@@ -389,6 +388,7 @@ def main_page() -> None:
             st.error("❌ 문제집 데이터가 비어있습니다.")
             st.session_state.filtered_df = pd.DataFrame()
             return
+
 
 # 문제 출제 전 필터링 및 문제 초기화 체크
 if st.session_state.filtered_df is None or st.session_state.filtered_df.empty:
