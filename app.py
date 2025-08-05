@@ -12,7 +12,9 @@ from gspread.exceptions import SpreadsheetNotFound, WorksheetNotFound
 USER_DATA_DIR = "user_data"
 os.makedirs(USER_DATA_DIR, exist_ok=True)
 
-# 세션 상태 기본값 초기화
+def get_safe_filename(name: str) -> str:
+    return re.sub(r"[^\w]", "_", name)
+
 def init_session_state() -> None:
     defaults = {
         "logged_in": False,
@@ -41,11 +43,6 @@ def init_session_state() -> None:
         if key not in st.session_state:
             st.session_state[key] = value
 
-# 파일명 안전하게 만드는 함수
-def get_safe_filename(name: str) -> str:
-    return re.sub(r"[^\w]", "_", name)
-
-# 사용자 활동 기록 로컬 저장
 def record_user_activity() -> None:
     file_path = "progress_log.csv"
     header = ["user_name", "timestamp"]
@@ -60,7 +57,6 @@ def record_user_activity() -> None:
     except Exception as e:
         st.warning(f"기록 파일에 저장하는 중 오류가 발생했습니다: {e}")
 
-# Google Sheets 연결 객체 반환
 def connect_to_gspread() -> gspread.Client:
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -80,7 +76,6 @@ def connect_to_gspread() -> gspread.Client:
         st.error(f"Google Sheets 연결 오류: {e}")
         st.stop()
 
-# 구글 시트 진행 로그 기록
 def connect_to_sheet() -> gspread.Worksheet:
     client = connect_to_gspread()
     try:
@@ -108,7 +103,6 @@ def log_to_sheet(data: dict):
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
         st.error(f"📛 구글 시트 기록 실패: {e}")
 
-# 사용자 진행 데이터 로드
 def load_user_progress(username: str, exam_name: str = None):
     safe_name = get_safe_filename(username)
     fname = f"{safe_name}_{exam_name}_progress.csv" if exam_name else f"{safe_name}_progress.csv"
@@ -125,7 +119,6 @@ def load_user_progress(username: str, exam_name: str = None):
             st.warning(f"진행 파일을 읽는 중 오류가 발생했습니다: {e}")
     return skip_ids, low_ids, file_path, df
 
-# 세션 상태에 진행 정보 반영
 def update_session_progress_from_df(username: str, df):
     if df is None:
         st.session_state.score = 0
@@ -148,7 +141,6 @@ def update_session_progress_from_df(username: str, df):
             "해설": row.get("explanation", ""),
         })
 
-# 사용자 진행 파일 저장
 def save_user_progress(file_path: str, data: dict) -> None:
     df_line = pd.DataFrame([data])
     write_header = not os.path.exists(file_path)
@@ -157,7 +149,6 @@ def save_user_progress(file_path: str, data: dict) -> None:
     except Exception as e:
         st.warning(f"사용자 진행 파일 저장 중 오류가 발생했습니다: {e}")
 
-# 문제 난이도 평가 저장
 def update_question_rating(file_path: str, question_id: str, rating: str) -> None:
     try:
         if os.path.exists(file_path):
@@ -173,7 +164,6 @@ def update_question_rating(file_path: str, question_id: str, rating: str) -> Non
     except Exception as e:
         st.warning(f"문제 이해도 저장 중 오류가 발생했습니다: {e}")
 
-# 주간 랭킹 표시
 def display_weekly_ranking() -> None:
     file_path = "progress_log.csv"
     if not os.path.exists(file_path):
@@ -212,7 +202,6 @@ def display_weekly_ranking() -> None:
         row = ranking_df[ranking_df["user_name"] == st.session_state.user_name].iloc[0]
         st.success(f"{st.session_state.user_name}님의 이번 주 풀이 수: {int(row['풀이수'])}개, 순위: {int(row['순위'])}위")
 
-# 엑셀로 오답 저장
 def save_wrong_answers_to_excel():
     if not st.session_state.wrong_list:
         st.sidebar.warning("❗ 오답이 없습니다.")
@@ -228,7 +217,6 @@ def save_wrong_answers_to_excel():
     except Exception as e:
         st.sidebar.error(f"❗엑셀 파일을 저장하는 중 오류 발생: {e}")
 
-# 오답 목록 테이블 표시
 def show_wrong_list_table():
     if not st.session_state.wrong_list:
         st.warning("❗ 오답이 없습니다.")
@@ -239,7 +227,6 @@ def show_wrong_list_table():
         wrong_df[["날짜", "문제번호", "단원명", "문제", "선택", "정답", "해설"]]
     )
 
-# 로그인 페이지
 def login_page() -> None:
     st.title("🔐 사용자 로그인")
     name_input = st.text_input("이름을 입력하세요")
@@ -260,7 +247,6 @@ def login_page() -> None:
         else:
             st.error("❌ 암호가 틀렸습니다.")
             return
-        # 로그인 시 기존 진행 상황 초기화
         st.session_state.skip_ids = set()
         st.session_state.low_ids = set()
         st.session_state.user_progress_file = None
@@ -271,7 +257,6 @@ def login_page() -> None:
         st.session_state.prev_selected_chapter = None
         st.experimental_rerun()
 
-# 데이터 로드 및 필터링
 def load_and_filter_data(df_loaded: pd.DataFrame, selected_chapter: str, skip_ids: set, low_ids: set) -> None:
     if df_loaded.empty:
         st.session_state.df = pd.DataFrame()
@@ -306,8 +291,6 @@ def load_and_filter_data(df_loaded: pd.DataFrame, selected_chapter: str, skip_id
     st.session_state.answered = False
     st.session_state.last_question = None
 
-
-# 새 문제 뽑기
 def get_new_question() -> None:
     df = st.session_state.df
     if df is not None and not df.empty:
@@ -315,8 +298,6 @@ def get_new_question() -> None:
     else:
         st.session_state.question = None
 
-
-# 메인 페이지
 def main_page() -> None:
     st.title("📘 공인중개사 OX 퀴즈")
     st.sidebar.header("📂 문제집 선택")
@@ -459,7 +440,8 @@ def main_page() -> None:
             }
             if st.session_state.user_progress_file:
                 save_user_progress(st.session_state.user_progress_file, data_to_save)
-            log_to_sheet(data_to_save)
+            # 여기에 로그 구글시트 기록도 호출 가능
+            # log_to_sheet(data_to_save)
 
             st.session_state.last_correct = correct
             st.session_state.last_qnum = str(qnum_display)
@@ -485,6 +467,7 @@ def main_page() -> None:
                 get_new_question()
                 st.session_state.answered = False
                 st.experimental_rerun()
+
             if rating_col2.button("📘 이해 50~90%"):
                 if st.session_state.user_progress_file:
                     update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, "mid")
@@ -499,6 +482,7 @@ def main_page() -> None:
                 get_new_question()
                 st.session_state.answered = False
                 st.experimental_rerun()
+
             if rating_col3.button("🔄 이해 50% 미만"):
                 if st.session_state.user_progress_file:
                     update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, "low")
@@ -532,7 +516,7 @@ def main_page() -> None:
         st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
         st.markdown("### 📋 사용 가이드")
         st.markdown("""
-        1. **사이드바**에서 Google Sheets URL을 입력하거나 미리 정의된 문제집을 선택하세요 
+        1. **사이드바**에서 Google Sheets URL을 입력하거나 미리 정의된 문제집을 선택하세요
         2. 워크시트 이름을 입력하세요 (비워두면 첫 번째 시트 사용)
         3. **\"문제집 로드\"** 버튼을 클릭하세요
         4. 문제집이 로드되면 퀴즈를 시작할 수 있습니다
@@ -540,7 +524,7 @@ def main_page() -> None:
         #### 📝 스프레드시트 형식 요구사항:
         - 필수 컬럼: `문제`, `정답`
         - 선택 컬럼: `단원명`, `문제번호`, `해설`
-        - 정답 형식: \"O\" 또는 \"X\"
+        - 정답 형식: "O" 또는 "X"
         """)
 
 def load_data_from_google_sheet(spreadsheet_url_or_id: str, worksheet_name: str = None) -> pd.DataFrame:
