@@ -86,33 +86,27 @@ def connect_to_gspread() -> gspread.Client:
         st.stop()
 
 
-# 수정 제안 1: 연결 함수
-def connect_to_sheet() -> gspread.Worksheet | None: # 반환 타입에 None 추가
-    try:
-        client = connect_to_gspread()
-        sheet = client.open("oxquiz_progress_log").worksheet("시트1")
-        return sheet
-    except Exception as e:
-        # st.stop() 대신 오류 메시지를 세션에 저장하고 None 반환
-        st.session_state.sheet_log_status = f"📛 진행 로그 시트 열기 실패: {e}"
-        return None
-
-# 수정 제안 2: 기록 함수
 def log_to_sheet(data: dict):
-    sheet = connect_to_sheet()
-    if sheet is None: # 시트 연결에 실패했으면 여기서 중단
-        st.error(st.session_state.sheet_log_status) # 실패 메시지 표시
-        return
-
     row = [
-        # ... row 데이터 생성 ...
+        str(data.get("timestamp") or ""),
+        str(data.get("user_name") or ""),
+        str(data.get("question_id") or ""),
+        str(data.get("correct") or ""),
+        str(data.get("rating") or ""),
+        str(data.get("exam_name") or ""),
     ]
     try:
+        sheet = connect_to_sheet()
+        if sheet is None:
+            st.error("📛 구글 시트 연결이 되어있지 않습니다. 기록할 수 없습니다.")
+            return
         sheet.append_row(row)
         st.session_state.sheet_log_status = "✅ 구글 시트에 기록 성공!"
+        st.info("✅ 구글 시트에 기록 성공!")
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
-        st.error(st.session_state.sheet_log_status) # 여기서도 실패 메시지 표시
+        st.error(f"📛 구글 시트 기록 실패: {e}")
+        raise e  # 예외를 강제로 발생시켜 자세한 오류 로그를 앱(콘솔)에서 확인할 수 있도록 합니다.
 
 
 
