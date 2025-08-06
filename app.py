@@ -478,7 +478,7 @@ def login_page() -> None:
         st.session_state.answered = False
         st.session_state.prev_selected_file = None
         st.session_state.prev_selected_chapter = None
-        st.experimental_rerun()
+        st.rerun()
 
 
 def run_app() -> None:
