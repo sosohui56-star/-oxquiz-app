@@ -86,6 +86,16 @@ def connect_to_gspread() -> gspread.Client:
         st.stop()
 
 
+def connect_to_sheet() -> gspread.Worksheet | None:
+    try:
+        client = connect_to_gspread()
+        sheet = client.open("oxquiz_progress_log").worksheet("시트1")
+        return sheet
+    except Exception as e:
+        st.session_state.sheet_log_status = f"📛 진행 로그 시트 열기 실패: {e}"
+        return None
+
+
 def log_to_sheet(data: dict):
     row = [
         str(data.get("timestamp") or ""),
@@ -106,8 +116,7 @@ def log_to_sheet(data: dict):
     except Exception as e:
         st.session_state.sheet_log_status = f"📛 구글 시트 기록 실패: {e}"
         st.error(f"📛 구글 시트 기록 실패: {e}")
-        raise e  # 예외를 강제로 발생시켜 자세한 오류 로그를 앱(콘솔)에서 확인할 수 있도록 합니다.
-
+        raise e  # 예외를 강제로 발생시켜 로그에 에러 상세 출력
 
 
 def load_user_progress(username: str, exam_name: str = None):
@@ -426,7 +435,6 @@ def main_page() -> None:
 
     else:
         st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
-
 
 
 def run_app() -> None:
