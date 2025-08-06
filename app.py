@@ -286,23 +286,24 @@ def main_page() -> None:
                     USER_DATA_DIR,
                     f"{get_safe_filename(st.session_state.user_name)}_{get_safe_filename(sheet_name)}_progress.csv"
                 )
+                # 로드 시 모든 상태 초기화
+                st.session_state.question = None
+                st.session_state.answered = False
+                st.session_state.score = 0
+                st.session_state.total = 0
+                st.session_state.wrong_list = []
                 st.success(f"✅ '{sheet_name}' 문제집을 성공적으로 로드했습니다!")
-                st.write(f"총 {len(df_source)}개의 문제가 있습니다.")
-                st.write("문제집 구조:", df_source.columns.tolist())
-                with st.expander("첫 번째 문제 예시 보기"):
-                    st.write(df_source.head(1))
+                st.rerun() # 상태 초기화 후 깔끔하게 새로 시작
 
     if st.session_state.df is not None and not st.session_state.df.empty:
         st.subheader("📚 퀴즈 시작")
 
-        # 필수 컬럼 확인
         required_cols = {"문제", "정답"}
         if not required_cols.issubset(st.session_state.df.columns):
             st.error(f"필수 컬럼이 누락되었습니다: {required_cols - set(st.session_state.df.columns)}")
             st.info("Google Sheets에 '문제'와 '정답' 컬럼이 있어야 합니다.")
             return
 
-        # 단원 선택 지원(Optional)
         if "단원명" in st.session_state.df.columns:
             chapters = ["전체 보기"] + sorted(st.session_state.df["단원명"].dropna().unique().tolist())
             selected_chapter = st.selectbox("단원 선택", chapters)
@@ -317,127 +318,100 @@ def main_page() -> None:
             st.warning("선택한 단원에 해당하는 문제가 없습니다.")
             return
 
-        if st.session_state.question is None or st.session_state.answered is False:
+        # <--- 로직 수정의 핵심 부분 시작 --->
+        
+        # 1. 아직 풀 문제가 없으면 새로 가져오기 (최초 실행 시)
+        if st.session_state.question is None:
             get_new_question(filtered_df)
 
+        # 2. 현재 문제 표시
         question = st.session_state.question
+        if question is None:
+             st.warning("더 이상 풀 문제가 없습니다. 다른 단원을 선택해주세요.")
+             return
+
         st.write("---")
         if "단원명" in question:
             st.write(f"**단원:** {question.get('단원명', '')}")
-
-        qnum_display = question.get("문제번호", "")
-        try:
-            qnum_display = int(qnum_display)
-        except Exception:
-            pass
+        qnum_display = question.get("문제번호", "N/A")
         st.write(f"**문제번호:** {qnum_display}")
         st.write(f"**문제:** {question['문제']}")
-
-        col1, col2, col3 = st.columns(3)
-        user_answer = None
-        if col1.button("⭕ O", use_container_width=True):
-            user_answer = "O"
-        elif col2.button("❌ X", use_container_width=True):
-            user_answer = "X"
-        elif col3.button("⁉️ 모름", use_container_width=True):
-            user_answer = "모름"
-
-        if user_answer:
-            st.session_state.total += 1
-            st.session_state.answered = True
-            st.session_state.last_question = question.copy()
-            record_user_activity()
-
-            correct = (user_answer == question["정답"])
-            if correct:
-                st.session_state.score += 1
+        
+        # 3. 해설/평가 표시 (답변이 제출된 상태일 때)
+        if st.session_state.answered:
+            last_q = st.session_state.last_question
+            
+            # 정답/오답 결과 표시
+            if st.session_state.last_correct:
                 st.success("✅ 정답입니다!")
             else:
-                st.session_state.wrong_list.append({
-                    "이름": st.session_state.user_name,
-                    "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "문제번호": qnum_display,
-                    "단원명": question.get("단원명", ""),
-                    "문제": question["문제"],
-                    "정답": question["정답"],
-                    "선택": user_answer,
-                    "해설": question.get("해설", "") if pd.notna(question.get("해설", "")) else "",
-                })
-                st.error(f"❌ 오답입니다. 정답은 {question['정답']}")
-
-            data_to_save = {
-                "timestamp": datetime.now().isoformat(),
-                "user_name": st.session_state.user_name,
-                "question_id": str(qnum_display),
-                "correct": correct,
-                "rating": "",
-                "chapter": question.get("단원명", ""),
-                "question": question["문제"],
-                "correct_answer": question["정답"],
-                "answer": user_answer,
-                "explanation": question.get("해설", "") if pd.notna(question.get("해설", "")) else "",
-            }
-
-            if st.session_state.user_progress_file:
-                save_user_progress(st.session_state.user_progress_file, data_to_save)
-
-            st.session_state.last_correct = correct
-            st.session_state.last_qnum = str(qnum_display)
-
-        # 이해도 체크 버튼 영역 (항상 사용자 답변 후에 활성화)
-        if st.session_state.answered and st.session_state.last_question is not None:
-            last_q = st.session_state.last_question
+                st.error(f"❌ 오답입니다. 정답은 {last_q['정답']}")
+            
+            # 해설 표시
             if "해설" in last_q and pd.notna(last_q["해설"]):
                 st.info(f"📘 해설: {last_q['해설']}")
 
+            # 이해도 체크 버튼
             rating_col1, rating_col2, rating_col3 = st.columns(3)
+            rating_buttons = {
+                "skip": rating_col1.button("❌ 다시 보지 않기"),
+                "mid": rating_col2.button("📘 이해 50~90%"),
+                "low": rating_col3.button("🔄 이해 50% 미만"),
+            }
 
-            if rating_col1.button("❌ 다시 보지 않기"):
-                if st.session_state.user_progress_file:
-                    update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, "skip")
-                log_to_sheet({
-                    "timestamp": datetime.now().isoformat(),
-                    "user_name": st.session_state.user_name,
-                    "question_id": st.session_state.last_qnum,
-                    "correct": st.session_state.last_correct,
-                    "rating": "skip",
-                    "exam_name": st.session_state.exam_name,
-                })
-                # 문제에서 제외 후 새로운 문제 로드
-                st.session_state.df = st.session_state.df[st.session_state.df["문제번호"].astype(str) != st.session_state.last_qnum]
-                get_new_question()
-                st.session_state.answered = False
-                st.rerun()
+            for rating, is_clicked in rating_buttons.items():
+                if is_clicked:
+                    if st.session_state.user_progress_file:
+                        update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, rating)
+                    log_to_sheet({
+                        "timestamp": datetime.now().isoformat(),
+                        "user_name": st.session_state.user_name,
+                        "question_id": st.session_state.last_qnum,
+                        "correct": st.session_state.last_correct,
+                        "rating": rating,
+                        "exam_name": st.session_state.exam_name,
+                    })
+                    if rating == "skip":
+                         st.session_state.df = st.session_state.df[st.session_state.df["문제번호"].astype(str) != st.session_state.last_qnum]
+                    
+                    st.session_state.answered = False
+                    get_new_question(filtered_df) # 다음 문제 가져오기
+                    st.rerun()
 
-            if rating_col2.button("📘 이해 50~90%"):
-                if st.session_state.user_progress_file:
-                    update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, "mid")
-                log_to_sheet({
-                    "timestamp": datetime.now().isoformat(),
-                    "user_name": st.session_state.user_name,
-                    "question_id": st.session_state.last_qnum,
-                    "correct": st.session_state.last_correct,
-                    "rating": "mid",
-                    "exam_name": st.session_state.exam_name,
-                })
-                get_new_question()
-                st.session_state.answered = False
-                st.rerun()
+        # 4. 문제 풀이 버튼 표시 (아직 답변하지 않았을 때)
+        else:
+            col1, col2, col3 = st.columns(3)
+            answer_buttons = {
+                "O": col1.button("⭕ O", use_container_width=True),
+                "X": col2.button("❌ X", use_container_width=True),
+                "모름": col3.button("⁉️ 모름", use_container_width=True),
+            }
 
-            if rating_col3.button("🔄 이해 50% 미만"):
-                if st.session_state.user_progress_file:
-                    update_question_rating(st.session_state.user_progress_file, st.session_state.last_qnum, "low")
-                log_to_sheet({
-                    "timestamp": datetime.now().isoformat(),
-                    "user_name": st.session_state.user_name,
-                    "question_id": st.session_state.last_qnum,
-                    "correct": st.session_state.last_correct,
-                    "rating": "low",
-                    "exam_name": st.session_state.exam_name,
-                })
-                get_new_question()
-                st.session_state.answered = False
-                st.rerun()
+            for user_answer, is_clicked in answer_buttons.items():
+                if is_clicked:
+                    st.session_state.total += 1
+                    st.session_state.answered = True
+                    st.session_state.last_question = question.copy() # 현재 문제를 last_question에 저장
+                    record_user_activity()
+
+                    correct = (user_answer == question["정답"])
+                    st.session_state.last_correct = correct # 정답 여부 저장
+
+                    if correct:
+                        st.session_state.score += 1
+                    else:
+                        st.session_state.wrong_list.append({
+                            "이름": st.session_state.user_name,
+                            "날짜": datetime.now().strftime("%Y-%m-%d %H:%M"), "문제번호": qnum_display,
+                            "단원명": question.get("단원명", ""), "문제": question["문제"],
+                            "정답": question["정답"], "선택": user_answer,
+                            "해설": question.get("해설", "") if pd.notna(question.get("해설", "")) else "",
+                        })
+                    
+                    st.session_state.last_qnum = str(qnum_display)
+                    st.rerun() # 해설을 보여주기 위해 페이지 새로고침
+
+        # <--- 로직 수정의 핵심 부분 끝 --->
 
         # 우측 사이드바 - 사용자 정보 & 기능
         st.sidebar.markdown("---")
@@ -446,7 +420,7 @@ def main_page() -> None:
         st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
         st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
 
-        remaining_count = st.session_state.df.shape[0] if st.session_state.df is not None else 0
+        remaining_count = filtered_df.shape[0] if filtered_df is not None else 0
         st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
 
         if st.session_state.total > 0:
@@ -457,6 +431,7 @@ def main_page() -> None:
 
     else:
         st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
+
 
 
 def run_app() -> None:
