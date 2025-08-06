@@ -421,17 +421,26 @@ def main_page() -> None:
                 st.session_state.answered = False
                 st.rerun()
 
-        # 우측 사이드바 - 사용자 정보 & 기능
-        st.sidebar.markdown("---")
-        st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
-        st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
-        st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
-        st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
-        remaining_count = st.session_state.df.shape[0] if st.session_state.df is not None else 0
-        st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
+        if st.session_state.df is not None and not st.session_state.df.empty:
+    # (여기에 우측 사이드바 코드 포함)
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f"👤 사용자: **{st.session_state.user_name}**")
+    st.sidebar.markdown(f"✅ 정답 수: {st.session_state.score}")
+    st.sidebar.markdown(f"❌ 오답 수: {len(st.session_state.wrong_list)}")
+    st.sidebar.markdown(f"📊 총 풀어 수: {st.session_state.total}")
 
+    remaining_count = st.session_state.df.shape[0] if st.session_state.df is not None else 0
+    st.sidebar.markdown(f"📘 남은 문제: {remaining_count}")
+
+    if st.session_state.total > 0:
+        accuracy = (st.session_state.score / st.session_state.total) * 100
+        st.sidebar.markdown(f"🎯 정답률: {accuracy:.1f}%")
     else:
-        st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
+        st.sidebar.markdown("🎯 정답률: 0%")
+
+else:
+    st.info("📝 위에서 Google Sheets 문제집을 먼저 로드해주세요.")
 
     st.markdown("### 📋 사용 가이드")
     st.markdown("""
